@@ -216,8 +216,28 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
+  //modified by me
+  /* If the new thread has higher priority than the current thread,
+     yield the CPU. */
+  if (thread_current()->priority < t->priority) 
+  {
+  thread_yield();
+  }
   return tid;
 }
+
+//Implemented by me
+/* fuction to compare the priority between two threads*/
+bool
+thread_priority_compare(const struct list_elem *a, const struct list_elem *b,
+void *aux UNUSED) 
+{
+  struct thread *t1 = list_entry(a, struct thread, elem);
+  struct thread *t2 = list_entry(b, struct thread, elem);
+
+  return t1->priority > t2->priority;
+}
+
 
 /* Puts the current thread to sleep.  It will not be scheduled
    again until awoken by thread_unblock().
@@ -252,7 +272,10 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+
+  //modified by me
+  list_insert_ordered(&ready_list, &t->elem, thread_priority_compare, NULL);
+
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -325,6 +348,10 @@ thread_yield (void)
   if (cur != idle_thread) 
     list_push_back (&ready_list, &cur->elem);
   cur->status = THREAD_READY;
+  
+  //modified by me
+  list_sort(&ready_list, thread_priority_compare, NULL);
+  
   schedule ();
   intr_set_level (old_level);
 }
@@ -393,11 +420,16 @@ void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
+
+  //modified by me
+  /*reorder the ready_list*/
+  list_sort(&ready_list, thread_priority_compare, NULL);
+
 }
 
 /* Returns the current thread's priority. */
 int
-thread_get_priority (void) 
+thread_get_priority (void)
 {
   return thread_current ()->priority;
 }
