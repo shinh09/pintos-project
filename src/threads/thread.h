@@ -5,7 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 
-/* States in a thread's life cycle */
+/* States in a thread's life cycle. */
 enum thread_status
   {
     THREAD_RUNNING,     /* Running thread. */
@@ -39,7 +39,7 @@ typedef int tid_t;
              |                V                |
              |         grows downward          |
              |                                 |
-             |                                 |
+             |  `                               |
              |                                 |
              |                                 |
              |                                 |
@@ -82,8 +82,9 @@ typedef int tid_t;
    blocked state is on a semaphore wait list. */
 struct thread
   {
-    /* Owned by thread.c. */
+    /* 추가-1, 현재 쓰레드가 깨어나야 할 tick */
     int64_t wake_up_tick;       /* ⏰ Thread should wake up at this tick. */
+    struct list_elem sleep_elem;     /* 🔥 sleep_queue용 리스트 요소 */
 
     tid_t tid;                          /* Thread identifier. */
     enum thread_status status;          /* Thread state. */
