@@ -39,7 +39,7 @@ typedef int tid_t;
              |                V                |
              |         grows downward          |
              |                                 |
-             |  `                               |
+             |                                 |
              |                                 |
              |                                 |
              |                                 |
@@ -82,10 +82,7 @@ typedef int tid_t;
    blocked state is on a semaphore wait list. */
 struct thread
   {
-    /* 추가-1, 현재 쓰레드가 깨어나야 할 tick */
-    int64_t wake_up_tick;       /* ⏰ Thread should wake up at this tick. */
-    struct list_elem sleep_elem;     /* 🔥 sleep_queue용 리스트 요소 */
-
+    /* Owned by thread.c. */
     tid_t tid;                          /* Thread identifier. */
     enum thread_status status;          /* Thread state. */
     char name[16];                      /* Name (for debugging purposes). */
@@ -110,14 +107,9 @@ struct thread
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
 
-void thread_sleep(int64_t ticks);
-void thread_wakeup(int64_t current_ticks);
-bool cmp_wake_up_tick(const struct list_elem *a,
-                      const struct list_elem *b,
-                      void *aux);
-
 void thread_init (void);
 void thread_start (void);
+
 void thread_tick (void);
 void thread_print_stats (void);
 

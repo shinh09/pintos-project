@@ -37,8 +37,6 @@ static struct thread *initial_thread;
 /* Lock used by allocate_tid(). */
 static struct lock tid_lock;
 
-static struct list sleep_queue; /*추가*/
-
 /* Stack frame for kernel_thread(). */
 struct kernel_thread_frame 
   {
@@ -86,57 +84,6 @@ static tid_t allocate_tid (void);
 
    It is not safe to call thread_current() until this function
    finishes. */
-
-bool /*추가-1*/
-cmp_wake_up_tick(const struct list_elem *a,
-                 const struct list_elem *b,
-                 void *aux UNUSED) {
-  ASSERT(a != NULL);
-  ASSERT(b != NULL);
-
-  struct thread *t1 = list_entry(a, struct thread, sleep_elem);
-  struct thread *t2 = list_entry(b, struct thread, sleep_elem);
-
-  ASSERT(is_thread(t1));
-  ASSERT(is_thread(t2));
-
-  return t1->wake_up_tick < t2->wake_up_tick;
-}
-
-void thread_sleep(int64_t ticks) { /*추가-1*/
-  struct thread *cur = thread_current();
-  enum intr_level old_level;
-
-  ASSERT(cur != idle_thread); // idle thread는 sleep 걸리지 않게 하기
-  ASSERT(intr_get_level() == INTR_ON); // sleep은 인터럽트 ON 상태에서 호출되어야 함
-
-  old_level = intr_disable();
-
-  cur->wake_up_tick = timer_ticks() + ticks;
-
-  list_insert_ordered(&sleep_queue, &cur->sleep_elem, cmp_wake_up_tick, NULL);
-
-  thread_block();
-
-  intr_set_level(old_level);
-}
-
-void thread_wakeup(int64_t current_ticks) { /*추가-1*/
-  struct list_elem *e = list_begin(&sleep_queue);
-
-  while (e != list_end(&sleep_queue)) {
-    struct thread *t = list_entry(e, struct thread, sleep_elem);
-
-    ASSERT(is_thread(t)); // 유효한 thread인지 확인
-
-    if (t->wake_up_tick > current_ticks)
-      break;
-
-    e = list_remove(e); // 다음 요소 반환
-    thread_unblock(t);
-  }
-}
-
 void
 thread_init (void) 
 {
@@ -145,7 +92,6 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
-  list_init (&sleep_queue); /*추가-1*/
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -154,8 +100,7 @@ thread_init (void)
   initial_thread->tid = allocate_tid ();
 }
 
-/* Starts preemptive t`hread scheduling by enabling interrupts.`
-
+/* Starts preemptive thread scheduling by enabling interrupts.
    Also creates the idle thread. */
 void
 thread_start (void) 
