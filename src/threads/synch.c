@@ -68,7 +68,9 @@ sema_down (struct semaphore *sema)
   old_level = intr_disable ();
   while (sema->value == 0) 
     {
-      list_push_back (&sema->waiters, &thread_current ()->elem);
+      //slide 33-1
+      list_insert_ordered(&sema->waiters, &thread_current()->elem, cmp_priority, NULL);
+      // list_push_back (&sema->waiters, &thread_current ()->elem);
       thread_block ();
     }
   sema->value--;
@@ -113,10 +115,17 @@ sema_up (struct semaphore *sema)
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
-  if (!list_empty (&sema->waiters)) 
+  if (!list_empty (&sema->waiters)) {
+    //slide 33-3
+    list_sort(&sema->waiters, cmp_priority, NULL);
     thread_unblock (list_entry (list_pop_front (&sema->waiters),
                                 struct thread, elem));
+  }
   sema->value++;
+
+  //slide 33-3
+  test_max_priority();
+
   intr_set_level (old_level);
 }
 
@@ -284,6 +293,31 @@ cond_init (struct condition *cond)
    interrupt handler.  This function may be called with
    interrupts disabled, but interrupts will be turned back on if
    we need to sleep. */
+
+//slide 33-5
+bool 
+compared_priority_of_sema (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+    struct semaphore_elem *sema_a = list_entry(a, struct semaphore_elem, elem);
+    struct semaphore_elem *sema_b = list_entry(b, struct semaphore_elem, elem);
+
+    if (sema_a == NULL || sema_b == NULL)
+        return false;
+
+    struct list *list_a = &(sema_a->semaphore.waiters);
+    struct list *list_b = &(sema_b->semaphore.waiters);
+
+    if (list_a == NULL || list_b == NULL)
+        return false;
+
+    struct thread *thread_a = list_entry(list_begin(list_a), struct thread, elem);
+    struct thread *thread_b = list_entry(list_begin(list_b), struct thread, elem);
+
+    if (thread_a == NULL || thread_b == NULL)
+        return false;
+
+    return thread_a->priority > thread_b->priority;
+}
+
 void
 cond_wait (struct condition *cond, struct lock *lock) 
 {
@@ -295,7 +329,11 @@ cond_wait (struct condition *cond, struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
   
   sema_init (&waiter.semaphore, 0);
-  list_push_back (&cond->waiters, &waiter.elem);
+
+  //slide 33-2
+  // list_push_back (&cond->waiters, &waiter.elem);
+  list_insert_ordered(&cond->waiters, &waiter.elem, compared_priority_of_sema, NULL);
+  
   lock_release (lock);
   sema_down (&waiter.semaphore);
   lock_acquire (lock);
@@ -316,7 +354,10 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (!intr_context ());
   ASSERT (lock_held_by_current_thread (lock));
 
-  if (!list_empty (&cond->waiters)) 
+  if (!list_empty (&cond->waiters))
+
+  //slide 33-4
+    list_sort(&cond->waiters, compared_priority_of_sema, NULL);
     sema_up (&list_entry (list_pop_front (&cond->waiters),
                           struct semaphore_elem, elem)->semaphore);
 }

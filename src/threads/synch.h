@@ -35,6 +35,8 @@ struct condition
   {
     struct list waiters;        /* List of waiting threads. */
   };
+//slide 33-5추가
+bool compared_priority_of_sema(const struct list_elem *a, const struct list_elem *b, void *aux);
 
 void cond_init (struct condition *);
 void cond_wait (struct condition *, struct lock *);
