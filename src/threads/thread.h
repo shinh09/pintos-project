@@ -99,13 +99,23 @@ struct thread
 #endif
 
     /* Owned by thread.c. */
-    unsigned magic;                     /* Detects stack overflow. */
+    unsigned magic;  
+    // slide 11-1
+    int64_t wakeup_tick; 
+    
+                       /* Detects stack overflow. */
   };
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
+
+//slide 11-1
+void thread_sleep (int64_t ticks);
+void thread_wakeup (int64_t ticks);
+void update_next_tick_to_awake (int64_t ticks);
+int64_t get_next_tick_to_awake (void);
 
 void thread_init (void);
 void thread_start (void);
