@@ -93,6 +93,12 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
+    //slide 34-1-추가
+   int original_priority;
+   struct lock *wait_lock;
+   struct list donations;
+   struct list_elem donation_elem;
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -120,6 +126,13 @@ int64_t get_next_tick_to_awake (void);
 //slide 23-추가
 void test_max_priority(void);
 bool cmp_priority (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+
+//slide 34-1-추가
+void donate_priority(void);
+void remove_with_lock(struct lock *lock);
+void update_priority(void);
+
+
 
 void thread_init (void);
 void thread_start (void);
