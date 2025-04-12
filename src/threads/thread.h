@@ -88,6 +88,13 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
+
+    //modified by me
+    int init_priority;                 /* Original priority. */
+    struct lock *waiting_lock; /* Lock held by the thread. */
+    struct list donations;         /* List of priority donations. */
+    struct list_elem donation_elem; /* List element for donations. */
+
     struct list_elem allelem;           /* List element for all threads list. */
 
     //modified by me
@@ -120,6 +127,7 @@ void thread_print_stats (void);
 typedef void thread_func (void *aux);
 tid_t thread_create (const char *name, int priority, thread_func *, void *);
 bool thread_priority_compare (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+void update_priority(struct thread *t, int new_priority);
 
 void thread_block (void);
 void thread_unblock (struct thread *);
@@ -147,6 +155,11 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+void donate_priority(void);
+
+void refresh_priority(void);
+void remove_with_lock(struct lock *lock);
+
 
 #endif /* threads/thread.h */
 
