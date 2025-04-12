@@ -111,6 +111,10 @@ struct thread
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
+
+    //modified by me
+      int nice;                          /* Nice value for MLFQS. */
+      int recent_cpu;                   /* Recent CPU usage for MLFQS. */
   };
 
 /* If false (default), use round-robin scheduler.
@@ -153,13 +157,16 @@ void thread_set_priority (int);
 
 int thread_get_nice (void);
 void thread_set_nice (int);
+void mlfqs_update_priority(struct thread *t);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 void donate_priority(void);
 
 void refresh_priority(void);
 void remove_with_lock(struct lock *lock);
-
+void update_load_avg(void);
+void update_recent_cpu_all(void);
+void update_priority_all(void);
 
 #endif /* threads/thread.h */
 

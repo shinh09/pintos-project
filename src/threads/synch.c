@@ -216,13 +216,16 @@ lock_acquire (struct lock *lock)
 
 
   //modified by me
-  if(lock->holder != NULL && lock->holder->priority < cur->priority)
-    {
-      cur->waiting_lock = lock;
-      list_insert_ordered(&lock->holder->donations, &cur->donation_elem,
-                      thread_priority_compare, NULL);
-      donate_priority();
-    }
+  if (!thread_mlfqs)
+  {
+    if (lock->holder != NULL && lock->holder->priority < cur->priority)
+      {
+        cur->waiting_lock = lock;
+        list_insert_ordered(&lock->holder->donations, &cur->donation_elem,
+                            thread_priority_compare, NULL);
+        donate_priority();
+      }
+  }
 
   sema_down (&lock->semaphore);
 
@@ -265,15 +268,14 @@ lock_release (struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
 
 
-//modified by me
-enum intr_level old_level = intr_disable();
-
-
-  remove_with_lock(lock);
-  refresh_priority();
-
-
-  intr_set_level(old_level);
+  //modified by me
+  if (!thread_mlfqs)
+  {
+    enum intr_level old_level = intr_disable();
+    remove_with_lock(lock);
+    refresh_priority();
+    intr_set_level(old_level);
+  }
 
 
   lock->holder = NULL;
