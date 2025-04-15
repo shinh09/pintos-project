@@ -86,18 +86,15 @@ timer_elapsed (int64_t then)
 
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
-void
-timer_sleep (int64_t ticks) 
-{
-  int64_t start = timer_ticks ();
 
-  ASSERT (intr_get_level () == INTR_ON);
 
-  //slide 11-5
+void timer_sleep(int64_t ticks) {
+  ASSERT(intr_get_level() == INTR_ON);
+  if (ticks <= 0) return;
 
-  // while (timer_elapsed (start) < ticks)
-	// 	thread_yield (); <- 대체
-  thread_sleep(start + ticks);
+//Threads:AlarmClock-5
+thread_sleep(ticks);                          // 🔥 현재 스레드를 sleep queue에 넣기
+
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -177,11 +174,8 @@ timer_interrupt (struct intr_frame *args UNUSED)
   ticks++;
   thread_tick ();
 
-  //slide 11-6
-  if (get_next_tick_to_awake() <= ticks)
-	{
-	thread_wakeup(ticks);
-	}
+  //Threads:AlarmClock-6
+  thread_wakeup(ticks);
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

@@ -82,6 +82,16 @@ typedef int tid_t;
    blocked state is on a semaphore wait list. */
 struct thread
   {
+   //Threads:AlarmClock-1
+   int64_t wake_up_tick;         /* ⏰ Thread should wake up at this tick. */
+   struct list_elem sleep_elem;  /* 🔥 sleep_queue용 리스트 요소 */
+
+    //Threads:PriorityDonation-1
+    int original_priority;             // 아래 4개 요소 추가
+    struct lock *waiting_for_lock;    // 현재 스레드가 기다리는 잠금 객체
+    struct list donation;
+    struct list_elem donation_elem;
+
     /* Owned by thread.c. */
     tid_t tid;                          /* Thread identifier. */
     enum thread_status status;          /* Thread state. */
@@ -93,44 +103,34 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
-    //slide 34-1-추가
-   int original_priority;
-   struct lock *wait_lock;
-   struct list donations;
-   struct list_elem donation_elem;
-
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
 #endif
-
     /* Owned by thread.c. */
     unsigned magic;  
-    // slide 11-1
-    int64_t wakeup_tick; 
-    
                        /* Detects stack overflow. */
-  };
+};
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
 
-//slide 11-1
-void thread_sleep (int64_t ticks);
-void thread_wakeup (int64_t ticks);
-void update_next_tick_to_awake (int64_t ticks);
-int64_t get_next_tick_to_awake (void);
+//Threads:AlarmClock-1
+void thread_sleep(int64_t ticks);
+void thread_wakeup(int64_t current_ticks);
 
-//slide 23-추가
-void test_max_priority(void);
-bool cmp_priority (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+//Threads:PriorityScheduling-1
+void preempt_check(void);
+bool compared_priority (const struct list_elem *f, const struct list_elem *s, void *aux);
 
-//slide 34-1-추가
-void donate_priority(void);
-void remove_with_lock(struct lock *lock);
-void update_priority(void);
+
+//Threads:PriorityDonation-1
+bool compared_donate_priority (const struct list_elem *l, const struct list_elem *s, void *aux);
+void donate_priority (void);
+void removed_lock (struct lock *lock);
+void restore_priority (void);
 
 
 
