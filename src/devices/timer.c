@@ -17,6 +17,8 @@
 #error TIMER_FREQ <= 1000 recommended
 #endif
 
+extern struct thread *idle_thread;
+
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
 
@@ -87,14 +89,10 @@ timer_elapsed (int64_t then)
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
 
-
-void timer_sleep(int64_t ticks) {
-  ASSERT(intr_get_level() == INTR_ON);
-  if (ticks <= 0) return;
-
 //Threads:AlarmClock-5
-thread_sleep(ticks);                          // 🔥 현재 스레드를 sleep queue에 넣기
-
+void timer_sleep(int64_t ticks) {
+  int64_t start = timer_ticks ();
+  thread_sleep (start + ticks);
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -167,15 +165,32 @@ timer_print_stats (void)
   printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
 
-/* Timer interrupt handler. */
+
+//Threads:AlarmClock-6
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
 
-  //Threads:AlarmClock-6
-  thread_wakeup(ticks);
+  thread_wakeup(ticks); // 추가, ticks이 증가할때, wakeup function 실행되도록(일어날 thread 있는지 check)
+
+//Threads:BSD -4
+  if (thread_mlfqs) {
+    struct thread *curr = thread_current();
+
+    // 매 tick: running thread의 recent_cpu += 1
+    if (curr != idle_thread)
+      curr->recent_cpu = add_mixed(curr->recent_cpu, 1);  // 고정소수점 덧셈
+
+    // 매 100 tick: load_avg, recent_cpu 갱신
+    if (ticks % TIMER_FREQ == 0)  // 100
+      update_load_avg_and_recent_cpu();  // 아래 단계에서 구현 예정
+
+    // 매 4 tick: priority 갱신
+    if (ticks % 4 == 0)
+      update_all_priorities();  // 아래 단계에서 구현 예정
+  }
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

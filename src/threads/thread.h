@@ -39,7 +39,7 @@ typedef int tid_t;
              |                V                |
              |         grows downward          |
              |                                 |
-             |                                 |
+             |  `                               |
              |                                 |
              |                                 |
              |                                 |
@@ -82,22 +82,28 @@ typedef int tid_t;
    blocked state is on a semaphore wait list. */
 struct thread
   {
-   //Threads:AlarmClock-1
-   int64_t wake_up_tick;         /* ⏰ Thread should wake up at this tick. */
-   struct list_elem sleep_elem;  /* 🔥 sleep_queue용 리스트 요소 */
+    /* 추가-1, 현재 쓰레드가 깨어나야 할 tick */
+    int64_t wake_up_tick;       /*Thread should wake up at this tick. */
+    struct list_elem sleep_elem;     /* sleep_queue용 리스트 요소 */
+    
 
-    //Threads:PriorityDonation-1
-    int original_priority;             // 아래 4개 요소 추가
-    struct lock *waiting_for_lock;    // 현재 스레드가 기다리는 잠금 객체
-    struct list donation;
-    struct list_elem donation_elem;
-
-    /* Owned by thread.c. */
     tid_t tid;                          /* Thread identifier. */
     enum thread_status status;          /* Thread state. */
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
+
+
+    int original_priority;             // 아래 4개 요소 추가
+    
+    struct lock *waiting_for_lock;    // 현재 스레드가 기다리는 잠금 객체
+    struct list donation;
+    struct list_elem donation_elem;
+
+   //Threads:BSD -1
+   int nice;              // nice value of threads (-20 ~ 20)
+   int recent_cpu;        // recent cpu usage (use fixed-point.h)
+    
     struct list_elem allelem;           /* List element for all threads list. */
 
     /* Shared between thread.c and synch.c. */
@@ -107,36 +113,33 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
 #endif
+
     /* Owned by thread.c. */
-    unsigned magic;  
-                       /* Detects stack overflow. */
-};
+    unsigned magic;                     /* Detects stack overflow. */
+  };
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
+extern int load_avg;
+extern struct thread *idle_thread;
+void update_load_avg_and_recent_cpu(void);
+void update_thread_priority(struct thread *t);
 
 //Threads:AlarmClock-1
 void thread_sleep(int64_t ticks);
 void thread_wakeup(int64_t current_ticks);
 
-//Threads:PriorityScheduling-1
 void preempt_check(void);
 bool compared_priority (const struct list_elem *f, const struct list_elem *s, void *aux);
-
-
-//Threads:PriorityDonation-1
 bool compared_donate_priority (const struct list_elem *l, const struct list_elem *s, void *aux);
 void donate_priority (void);
 void removed_lock (struct lock *lock);
 void restore_priority (void);
 
-
-
 void thread_init (void);
 void thread_start (void);
-
 void thread_tick (void);
 void thread_print_stats (void);
 
@@ -164,5 +167,8 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+
+
 
 #endif /* threads/thread.h */

@@ -17,6 +17,9 @@ bool sema_try_down (struct semaphore *);
 void sema_up (struct semaphore *);
 void sema_self_test (void);
 
+bool compared_priority_of_sema (const struct list_elem *l, const struct list_elem *s, void *aux);
+
+
 /* Lock. */
 struct lock 
   {
@@ -35,9 +38,6 @@ struct condition
   {
     struct list waiters;        /* List of waiting threads. */
   };
-
-//Threads:PrioritySynchronization-5
-bool compared_priority_of_sema (const struct list_elem *l, const struct list_elem *s, void *aux);
 
 void cond_init (struct condition *);
 void cond_wait (struct condition *, struct lock *);
