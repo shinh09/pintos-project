@@ -29,6 +29,8 @@ tid_t
 process_execute (const char *file_name) 
 {
   char *fn_copy;
+  char *file_name_only;
+  char *save_ptr;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
@@ -38,10 +40,21 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+  /* Parse file name to get only the program name (before first space). */
+  file_name_only = palloc_get_page(0);  // 파일명만 따로 복사할 공간
+  if (file_name_only == NULL) {
+    palloc_free_page(fn_copy);
+    return TID_ERROR;
+  }
+  strlcpy(file_name_only, file_name, PGSIZE);
+  char *parsed_name = strtok_r(file_name_only, " ", &save_ptr);
+
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (parsed_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+    palloc_free_page (fn_copy);
+
+  palloc_free_page(file_name_only);  // 파일명용 메모리 해제
   return tid;
 }
 
