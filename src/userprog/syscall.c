@@ -12,6 +12,30 @@ syscall_init (void)
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
+bool
+is_valid_ptr(const void *usr_ptr)
+{
+    struct thread *cur;
+
+    /* 1. Get current thread */
+    cur = thread_current();
+
+    /* 2. Basic checks */
+    if (usr_ptr == NULL) {
+        return false;
+    }
+    if (!is_user_vaddr(usr_ptr)) {
+        return false;
+    }
+
+    /* 3. Page directory check */
+    if (pagedir_get_page(cur->pagedir, usr_ptr) == NULL) {
+        return false;
+    }
+
+    return true;
+}
+
 static void
 syscall_handler (struct intr_frame *f) 
 {
