@@ -151,6 +151,7 @@ start_process (void *file_name_)
 
   /* Set up argument stack */
   argument_stack(argv, argc, &if_.esp);
+  hex_dump(if_.esp, if_.esp, PHYS_BASE - if_.esp, true);
 
   /* Free allocated memory */
   palloc_free_page (file_name);
