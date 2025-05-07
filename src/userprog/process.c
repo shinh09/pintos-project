@@ -146,7 +146,7 @@ start_process (void *file_name_)
 
   /* Set up argument stack */
   argument_stack(argv, argc, &if_.esp);
-  hex_dump(if_.esp, if_.esp, PHYS_BASE - if_.esp, true);
+  // hex_dump(if_.esp, if_.esp, PHYS_BASE - if_.esp, true);
 
   /* Free allocated memory */
   palloc_free_page (file_name);
@@ -188,9 +188,8 @@ process_exit (void)
     if (cur->fd_table[fd] != NULL) {
         if (fd >= 3 && cur->fd_table[fd]->file_struct != NULL) {
             file_close(cur->fd_table[fd]->file_struct);
+            list_remove(&cur->fd_table[fd]->elem);
         }
-
-        list_remove(&cur->fd_table[fd]->elem);
 
         free(cur->fd_table[fd]);
         cur->fd_table[fd] = NULL;
