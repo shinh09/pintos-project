@@ -73,6 +73,7 @@ argument_stack (const char *argv[], int argc, void **esp)
         stack_ptr -= len;
         memcpy(stack_ptr, argv[i], len);
         argv_addr[i] = stack_ptr;
+        argv[i] = stack_ptr;
     }
 
     uintptr_t align = (uintptr_t)stack_ptr % 4;
@@ -99,7 +100,8 @@ argument_stack (const char *argv[], int argc, void **esp)
     stack_ptr -= sizeof(void *);
     *(void **)stack_ptr = 0;
 
-    *esp = stack_ptr;
+    *esp = stack_ptr;  
+
 }
    
 static void
@@ -144,6 +146,7 @@ start_process (void *file_name_)
 
   /* Set up argument stack */
   argument_stack(argv, argc, &if_.esp);
+  int i;
   hex_dump(if_.esp, if_.esp, PHYS_BASE - if_.esp, true);
 
   /* Free allocated memory */

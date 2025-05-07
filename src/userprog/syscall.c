@@ -66,7 +66,8 @@ syscall_handler (struct intr_frame *f)
   int syscall_number;
 
   esp = f->esp;
-  
+  process_activate();
+
   /* 1. Validate stack pointer */
   if (!is_valid_ptr(esp)) {
     exit(-1);  /* or thread_exit(), depending on your policy */
@@ -101,9 +102,9 @@ syscall_handler (struct intr_frame *f)
     case SYS_WRITE:
       if (!is_valid_ptr(*(const void **)(esp + 8))) {
         exit(-1);
-      }  
-      f->eax = write(*(int *)(esp + 4), (const void *)(*(void **)(esp + 8)), *(unsigned *)(esp + 12));      break;
-    exit(-1);
+      }
+      f->eax = write(*(int *)(esp + 4), (const void *)(*(uintptr_t *)(esp + 8)), *(unsigned *)(esp + 12));
+      exit(-1);
     break;
   }
 }
