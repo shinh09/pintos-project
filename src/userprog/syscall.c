@@ -66,12 +66,10 @@ syscall_handler (struct intr_frame *f)
   int syscall_number;
 
   esp = f->esp;
-  printf("Syscall number: %d\n", *(int *)esp);
-
-
+  
   /* 1. Validate stack pointer */
   if (!is_valid_ptr(esp)) {
-  exit(-1);  /* or thread_exit(), depending on your policy */
+    exit(-1);  /* or thread_exit(), depending on your policy */
   }
 
   /* 2. Extract system call number */
@@ -87,28 +85,24 @@ syscall_handler (struct intr_frame *f)
         exit(-1);
       }
       exit(*(int *)(esp + 4));
-    break;
+      break;
     case SYS_EXEC:
-    if (!is_valid_ptr(esp + 4)) {
-      exit(-1);
-    }
-    f->eax = process_execute(*(char **)(esp + 4));
-    break;
-    case SYS_WAIT:
-    if (!is_valid_ptr(esp + 4)) {
-      exit(-1);
-    }
-    f->eax = wait(*(tid_t *)(esp + 4));
-    break;
-    case SYS_WRITE:
-      if (!is_valid_ptr(esp + 4) || !is_valid_ptr(esp + 8) || !is_valid_ptr(esp + 12)) {
+      if (!is_valid_ptr(esp + 4)) {
         exit(-1);
       }
-      f->eax = write(*(int *)(esp + 4),
-                      *(const void **)(esp + 8),
-                      *(unsigned *)(esp + 12));
+      f->eax = process_execute(*(char **)(esp + 4));
       break;
-    default:
+    case SYS_WAIT:
+      if (!is_valid_ptr(esp + 4)) {
+        exit(-1);
+      }
+      f->eax = wait(*(tid_t *)(esp + 4));
+      break;
+    case SYS_WRITE:
+      if (!is_valid_ptr(*(const void **)(esp + 8))) {
+        exit(-1);
+      }  
+      f->eax = write(*(int *)(esp + 4), (const void *)(*(void **)(esp + 8)), *(unsigned *)(esp + 12));      break;
     exit(-1);
     break;
   }
@@ -166,6 +160,8 @@ write (int fd, const void *buffer, unsigned size)
 
   unsigned buffer_size = size;
   void *buffer_tmp = buffer;
+
+  printf("write() 호출: fd=%d, buffer=%p, size=%u\n", fd, buffer, size);
 
   /* check the user memory pointing by buffer are valid */
   while (buffer_tmp != NULL)
