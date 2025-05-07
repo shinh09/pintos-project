@@ -1,6 +1,8 @@
 #ifndef USERPROG_SYSCALL_H
 #define USERPROG_SYSCALL_H
 
+#include "lib/kernel/list.h"
+
 void syscall_init (void);
 
 typedef int tid_t;

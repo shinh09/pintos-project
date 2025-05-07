@@ -2,8 +2,15 @@
 #include <stdio.h>
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
+
+#include "devices/shutdown.h"
+#include "filesys/file.h"
+#include "threads/malloc.h"
 #include "threads/thread.h"
-#include "userprog/syscall.h"
+#include "threads/synch.h"
+#include "threads/vaddr.h"
+#include "userprog/pagedir.h"
+#include "userprog/process.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -16,8 +23,8 @@ void halt(void);
 // 2.3
 struct list open_files;
 struct lock fs_lock;
-struct file_descriptor *get_open_file(int);
-write (int, const void *, unsigned);
+struct file_descriptor *get_open_file(int fd);
+int write (int fd, const void *buffer, unsigned size);
 
 void
 syscall_init (void) 
