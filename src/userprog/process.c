@@ -99,7 +99,7 @@ argument_stack (const char *argv[], int argc, void **esp)
     stack_ptr -= sizeof(void *);
     *(void **)stack_ptr = 0;
 
-    *esp = stack_ptr;  // 최종 esp 업데이트
+    *esp = stack_ptr;
 }
    
 static void
@@ -110,11 +110,10 @@ start_process (void *file_name_)
   bool success;
 
   /* Argument parsing */
-  char *argv[64];               // 인자 최대 64개 (필요시 늘리기)
+  char *argv[64];
   int argc = 0;
   char *token, *save_ptr;
 
-  /* 복사본을 만들어 strtok_r에 전달 */
   char *parse_copy = palloc_get_page(0);
   if (parse_copy == NULL) {
     palloc_free_page(file_name);
@@ -122,7 +121,6 @@ start_process (void *file_name_)
   }
   strlcpy(parse_copy, file_name, PGSIZE);
 
-  /* 파싱 */
   for (token = strtok_r(parse_copy, " ", &save_ptr); token != NULL;
       token = strtok_r(NULL, " ", &save_ptr)) {
     argv[argc++] = token;
@@ -146,7 +144,7 @@ start_process (void *file_name_)
 
   /* Set up argument stack */
   argument_stack(argv, argc, &if_.esp);
-  // hex_dump(if_.esp, if_.esp, PHYS_BASE - if_.esp, true);
+  hex_dump(if_.esp, if_.esp, PHYS_BASE - if_.esp, true);
 
   /* Free allocated memory */
   palloc_free_page (file_name);
