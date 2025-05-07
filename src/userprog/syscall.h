@@ -3,6 +3,8 @@
 
 void syscall_init (void);
 
+typedef int tid_t;
+
 struct file_descriptor {
     int fd_num;
     tid_t owner;
