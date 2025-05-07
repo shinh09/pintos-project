@@ -15,6 +15,7 @@
 #include "devices/timer.h"
 #ifdef USERPROG
 #include "userprog/process.h"
+#include "userprog/syscall.h"
 #endif
 
 /* Random value for struct thread's `magic' member.
@@ -219,6 +220,9 @@ thread_create (const char *name, int priority,
 
   /* Initialize thread. */
   init_thread (t, name, priority);
+  
+  memset(t->fd_table, 0, sizeof(t->fd_table));
+
   tid = t->tid = allocate_tid ();
 
   /* Prepare thread for first run by initializing its stack.
