@@ -5,10 +5,14 @@
 #include "threads/thread.h"
 
 static void syscall_handler (struct intr_frame *);
+
+// 2.2
 bool is_valid_ptr(const void *);
 int wait(tid_t);
 void exit(int);
 void halt(void);
+
+// 2.3
 
 void
 syscall_init (void) 
