@@ -20,6 +20,7 @@ void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+  list_init(&open_files);
 }
 
 bool

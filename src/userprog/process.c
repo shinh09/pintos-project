@@ -187,6 +187,9 @@ process_exit (void)
         if (fd >= 3 && cur->fd_table[fd]->file_struct != NULL) {
             file_close(cur->fd_table[fd]->file_struct);
         }
+
+        list_remove(&cur->fd_table[fd]->elem);
+        
         free(cur->fd_table[fd]);
         cur->fd_table[fd] = NULL;
     }
