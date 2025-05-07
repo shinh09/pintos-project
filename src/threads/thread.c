@@ -220,10 +220,25 @@ thread_create (const char *name, int priority,
 
   /* Initialize thread. */
   init_thread (t, name, priority);
-  
-  memset(t->fd_table, 0, sizeof(t->fd_table));
 
+  memset(t->fd_table, 0, sizeof(t->fd_table));
   tid = t->tid = allocate_tid ();
+
+  /* Reserve fd 0 for stdin */
+  t->fd_table[0] = malloc(sizeof(struct file_descriptor));
+  if (t->fd_table[0] != NULL) {
+      t->fd_table[0]->fd_num = 0;
+      t->fd_table[0]->owner = t->tid;
+      t->fd_table[0]->file_struct = NULL;  /* 표준입력은 파일 객체가 아님 */
+  }
+
+  /* Reserve fd 1 for stdout */
+  t->fd_table[1] = malloc(sizeof(struct file_descriptor));
+  if (t->fd_table[1] != NULL) {
+      t->fd_table[1]->fd_num = 1;
+      t->fd_table[1]->owner = t->tid;
+      t->fd_table[1]->file_struct = NULL;  /* 표준출력도 파일 객체 아님 */
+  }
 
   /* Prepare thread for first run by initializing its stack.
      Do this atomically so intermediate values for the 'stack' 
