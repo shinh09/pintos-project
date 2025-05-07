@@ -126,7 +126,8 @@ halt(void)
     shutdown_power_off();
 }
 
-struct file_descriptor *get_open_file(int fd) {
+struct file_descriptor *
+get_open_file(int fd) {
   struct list_elem *e;
   struct file_descriptor *fd_struct; 
   e = list_tail (&open_files);
@@ -138,4 +139,59 @@ struct file_descriptor *get_open_file(int fd) {
     }
   }
   return NULL;
+}
+
+int
+write (int fd, const void *buffer, unsigned size)
+{
+  struct file_descriptor *fd_struct;  
+  int status = 0;
+
+  unsigned buffer_size = size;
+  void *buffer_tmp = buffer;
+
+  /* check the user memory pointing by buffer are valid */
+  while (buffer_tmp != NULL)
+    {
+      if (!is_valid_ptr (buffer_tmp))
+	exit (-1);
+      
+      /* Advance */ 
+      if (buffer_size > PGSIZE)
+	{
+	  buffer_tmp += PGSIZE;
+	  buffer_size -= PGSIZE;
+	}
+      else if (buffer_size == 0)
+	{
+	  /* terminate the checking loop */
+	  buffer_tmp = NULL;
+	}
+      else
+	{
+	  /* last loop */
+	  buffer_tmp = buffer + size - 1;
+	  buffer_size = 0;
+	}
+    }
+
+  lock_acquire (&fs_lock); 
+  if (fd == STDIN_FILENO)
+    {
+      status = -1;
+    }
+  else if (fd == STDOUT_FILENO)
+    {
+      putbuf (buffer, size);;
+      status = size;
+    }
+  else 
+    {
+      fd_struct = get_open_file (fd);
+      if (fd_struct != NULL)
+	status = file_write (fd_struct->file_struct, buffer, size);
+    }
+  lock_release (&fs_lock);
+
+  return status;
 }
