@@ -25,6 +25,40 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
+tid_t
+process_execute (const char *file_name) 
+{
+  char *fn_copy;
+  char *file_name_only;  // 실행 파일명만 담을 포인터
+  char *save_ptr;
+  tid_t tid;
+
+  /* Make a copy of FILE_NAME. */
+  fn_copy = palloc_get_page (0);
+  if (fn_copy == NULL)
+    return TID_ERROR;
+  strlcpy (fn_copy, file_name, PGSIZE);
+
+  /* Parse file name to get only the program name (before first space). */
+  file_name_only = palloc_get_page(0);  // 파일명만 따로 복사할 공간
+  if (file_name_only == NULL) {
+    palloc_free_page(fn_copy);
+    return TID_ERROR;
+  }
+  strlcpy(file_name_only, file_name, PGSIZE);
+  char *parsed_name = strtok_r(file_name_only, " ", &save_ptr);
+
+  /* Create a new thread to execute FILE_NAME. */
+  tid = thread_create (parsed_name, PRI_DEFAULT, start_process, fn_copy);
+  if (tid == TID_ERROR)
+    palloc_free_page (fn_copy);
+
+  palloc_free_page(file_name_only);  // 파일명용 메모리 해제
+  return tid;
+}
+
+/* A thread function that loads a user process and starts it
+   running. */
 static void
 start_process (void *file_name_)
 {
@@ -32,12 +66,12 @@ start_process (void *file_name_)
   struct intr_frame if_;
   bool success;
 
-  /* ITISYIJY */
-  char *argv[64];
+  /* Argument parsing */
+  char *argv[64];               // 인자 최대 64개 (필요시 늘리기)
   int argc = 0;
   char *token, *save_ptr;
 
-  /* ITISYIJY */
+  /* 복사본을 만들어 strtok_r에 전달 */
   char *parse_copy = palloc_get_page(0);
   if (parse_copy == NULL) {
     palloc_free_page(file_name);
@@ -45,7 +79,7 @@ start_process (void *file_name_)
   }
   strlcpy(parse_copy, file_name, PGSIZE);
 
-  /* ITISYIJY */
+  /* 파싱 */
   for (token = strtok_r(parse_copy, " ", &save_ptr); token != NULL;
       token = strtok_r(NULL, " ", &save_ptr)) {
     argv[argc++] = token;
@@ -57,13 +91,13 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
 
-  /* ITISYIJY */
+  /* Load executable file (argv[0]) */
   success = load (argv[0], &if_.eip, &if_.esp);
 
   /* If load failed, quit */
   if (!success) {
-    palloc_free_page (file_name); // ITISYIJY
-    palloc_free_page (parse_copy); // ITISYIJY
+    palloc_free_page (file_name);
+    palloc_free_page (parse_copy);
     thread_exit ();
   }
 
@@ -79,37 +113,6 @@ start_process (void *file_name_)
   NOT_REACHED ();
 }
    
-
-/* A thread function that loads a user process and starts it
-   running. */
-static void
-start_process (void *file_name_)
-{
-  char *file_name = file_name_;
-  struct intr_frame if_;
-  bool success;
-
-  /* Initialize interrupt frame and load executable. */
-  memset (&if_, 0, sizeof if_);
-  if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
-  if_.cs = SEL_UCSEG;
-  if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
-
-  /* If load failed, quit. */
-  palloc_free_page (file_name);
-  if (!success) 
-    thread_exit ();
-
-  /* Start the user process by simulating a return from an
-     interrupt, implemented by intr_exit (in
-     threads/intr-stubs.S).  Because intr_exit takes all of its
-     arguments on the stack in the form of a `struct intr_frame',
-     we just point the stack pointer (%esp) to our stack frame
-     and jump to it. */
-  asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
-  NOT_REACHED ();
-}
 
 /* Waits for thread TID to die and returns its exit status.  If
    it was terminated by the kernel (i.e. killed due to an
