@@ -14,6 +14,7 @@ void exit(int);
 void halt(void);
 
 // 2.3
+struct list open_files;
 
 void
 syscall_init (void) 
