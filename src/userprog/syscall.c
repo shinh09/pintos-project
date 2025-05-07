@@ -2,212 +2,300 @@
 #include <stdio.h>
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
-
-#include "devices/shutdown.h"
-#include "filesys/file.h"
-#include "threads/malloc.h"
 #include "threads/thread.h"
-#include "threads/synch.h"
 #include "threads/vaddr.h"
-#include "userprog/pagedir.h"
-#include "userprog/process.h"
+#include "list.h"
+#include "process.h"
 
 static void syscall_handler (struct intr_frame *);
+void* check_addr(const void*);
+struct proc_file* list_search(struct list* files, int fd);
 
-// 2.2
-bool is_valid_ptr(const void *);
-int wait(tid_t);
-void exit(int);
-void halt(void);
+extern bool running;
 
-// 2.3
-struct list open_files;
-struct lock fs_lock;
-struct file_descriptor *get_open_file(int fd);
-int write (int fd, const void *buffer, unsigned size);
+struct proc_file {
+	struct file* ptr;
+	int fd;
+	struct list_elem elem;
+};
 
 void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
-
-  list_init(&open_files);
-  lock_init(&fs_lock);
-}
-
-bool
-is_valid_ptr(const void *usr_ptr)
-{
-    struct thread *cur;
-
-    /* 1. Get current thread */
-    cur = thread_current();
-
-    /* 2. Basic checks */
-    if (usr_ptr == NULL) {
-        return false;
-    }
-    if (!is_user_vaddr(usr_ptr)) {
-        return false;
-    }
-
-    /* 3. Page directory check */
-    if (pagedir_get_page(cur->pagedir, usr_ptr) == NULL) {
-        return false;
-    }
-
-    return true;
 }
 
 static void
-syscall_handler (struct intr_frame *f) 
+syscall_handler (struct intr_frame *f UNUSED) 
 {
-  void *esp;
-  int syscall_number;
+  int * p = f->esp;
 
-  esp = f->esp;
-  process_activate();
+	check_addr(p);
 
-  /* 1. Validate stack pointer */
-  if (!is_valid_ptr(esp)) {
-    exit(-1);  /* or thread_exit(), depending on your policy */
-  }
 
-  /* 2. Extract system call number */
-  syscall_number = *(int *)esp;
 
-  /* 3. Process system call */
-  switch (syscall_number) {
-    case SYS_HALT:
-      halt();
-      break;
-    case SYS_EXIT:
-      if (!is_valid_ptr(esp + 4)) {
-        exit(-1);
-      }
-      exit(*(int *)(esp + 4));
-      break;
-    case SYS_EXEC:
-      if (!is_valid_ptr(esp + 4)) {
-        exit(-1);
-      }
-      f->eax = process_execute(*(char **)(esp + 4));
-      break;
-    case SYS_WAIT:
-      if (!is_valid_ptr(esp + 4)) {
-        exit(-1);
-      }
-      f->eax = wait(*(tid_t *)(esp + 4));
-      break;
-    case SYS_WRITE:
-      if (!is_valid_ptr(*(const void **)(esp + 8))) {
-        exit(-1);
-      }
-      f->eax = write(*(int *)(esp + 4), (const void *)(*(uintptr_t *)(esp + 8)), *(unsigned *)(esp + 12));
-      exit(-1);
-    break;
-  }
+  int system_call = * p;
+	switch (system_call)
+	{
+		case SYS_HALT:
+		shutdown_power_off();
+		break;
+
+		case SYS_EXIT:
+		check_addr(p+1);
+		exit_proc(*(p+1));
+		break;
+
+		case SYS_EXEC:
+		check_addr(p+1);
+		check_addr(*(p+1));
+		f->eax = exec_proc(*(p+1));
+		break;
+
+		case SYS_WAIT:
+		check_addr(p+1);
+		f->eax = process_wait(*(p+1));
+		break;
+
+		case SYS_CREATE:
+		check_addr(p+5);
+		check_addr(*(p+4));
+		acquire_filesys_lock();
+		f->eax = filesys_create(*(p+4),*(p+5));
+		release_filesys_lock();
+		break;
+
+		case SYS_REMOVE:
+		check_addr(p+1);
+		check_addr(*(p+1));
+		acquire_filesys_lock();
+		if(filesys_remove(*(p+1))==NULL)
+			f->eax = false;
+		else
+			f->eax = true;
+		release_filesys_lock();
+		break;
+
+		case SYS_OPEN:
+		check_addr(p+1);
+		check_addr(*(p+1));
+
+		acquire_filesys_lock();
+		struct file* fptr = filesys_open (*(p+1));
+		release_filesys_lock();
+		if(fptr==NULL)
+			f->eax = -1;
+		else
+		{
+			struct proc_file *pfile = malloc(sizeof(*pfile));
+			pfile->ptr = fptr;
+			pfile->fd = thread_current()->fd_count;
+			thread_current()->fd_count++;
+			list_push_back (&thread_current()->files, &pfile->elem);
+			f->eax = pfile->fd;
+
+		}
+		break;
+
+		case SYS_FILESIZE:
+		check_addr(p+1);
+		acquire_filesys_lock();
+		f->eax = file_length (list_search(&thread_current()->files, *(p+1))->ptr);
+		release_filesys_lock();
+		break;
+
+		case SYS_READ:
+		check_addr(p+7);
+		check_addr(*(p+6));
+		if(*(p+5)==0)
+		{
+			int i;
+			uint8_t* buffer = *(p+6);
+			for(i=0;i<*(p+7);i++)
+				buffer[i] = input_getc();
+			f->eax = *(p+7);
+		}
+		else
+		{
+			struct proc_file* fptr = list_search(&thread_current()->files, *(p+5));
+			if(fptr==NULL)
+				f->eax=-1;
+			else
+			{
+				acquire_filesys_lock();
+				f->eax = file_read (fptr->ptr, *(p+6), *(p+7));
+				release_filesys_lock();
+			}
+		}
+		break;
+
+		case SYS_WRITE:
+		check_addr(p+7);
+		check_addr(*(p+6));
+		if(*(p+5)==1)
+		{
+			putbuf(*(p+6),*(p+7));
+			f->eax = *(p+7);
+		}
+		else
+		{
+			struct proc_file* fptr = list_search(&thread_current()->files, *(p+5));
+			if(fptr==NULL)
+				f->eax=-1;
+			else
+			{
+				acquire_filesys_lock();
+				f->eax = file_write (fptr->ptr, *(p+6), *(p+7));
+				release_filesys_lock();
+			}
+		}
+		break;
+
+		case SYS_SEEK:
+		check_addr(p+5);
+		acquire_filesys_lock();
+		file_seek(list_search(&thread_current()->files, *(p+4))->ptr,*(p+5));
+		release_filesys_lock();
+		break;
+
+		case SYS_TELL:
+		check_addr(p+1);
+		acquire_filesys_lock();
+		f->eax = file_tell(list_search(&thread_current()->files, *(p+1))->ptr);
+		release_filesys_lock();
+		break;
+
+		case SYS_CLOSE:
+		check_addr(p+1);
+		acquire_filesys_lock();
+		close_file(&thread_current()->files,*(p+1));
+		release_filesys_lock();
+		break;
+
+
+		default:
+		printf("Default %d\n",*p);
+	}
 }
 
-int
-wait(tid_t tid)
+int exec_proc(char *file_name)
 {
-    return process_wait(tid);
+	acquire_filesys_lock();
+	char * fn_cp = malloc (strlen(file_name)+1);
+	  strlcpy(fn_cp, file_name, strlen(file_name)+1);
+	  
+	  char * save_ptr;
+	  fn_cp = strtok_r(fn_cp," ",&save_ptr);
+
+	 struct file* f = filesys_open (fn_cp);
+
+	  if(f==NULL)
+	  {
+	  	release_filesys_lock();
+	  	return -1;
+	  }
+	  else
+	  {
+	  	file_close(f);
+	  	release_filesys_lock();
+	  	return process_execute(file_name);
+	  }
 }
 
-void
-exit(int status)
+void exit_proc(int status)
 {
-    struct thread *cur;
+	//printf("Exit : %s %d %d\n",thread_current()->name, thread_current()->tid, status);
+	struct list_elem *e;
 
-    /* 1. Get current thread */
-    cur = thread_current();
+      for (e = list_begin (&thread_current()->parent->child_proc); e != list_end (&thread_current()->parent->child_proc);
+           e = list_next (e))
+        {
+          struct child *f = list_entry (e, struct child, elem);
+          if(f->tid == thread_current()->tid)
+          {
+          	f->used = true;
+          	f->exit_error = status;
+          }
+        }
 
-    /* 2. Print exit message */
-    printf("%s: exit(%d)\n", cur->name, status);
 
-    /* TODO: Save exit status somewhere for parent process (if needed) */
+	thread_current()->exit_error = status;
 
-    /* 3. Terminate the current thread */
-    thread_exit();
+	if(thread_current()->parent->waitingon == thread_current()->tid)
+		sema_up(&thread_current()->parent->child_lock);
+
+	thread_exit();
 }
 
-void
-halt(void)
+void* check_addr(const void *vaddr)
 {
-    shutdown_power_off();
+	if (!is_user_vaddr(vaddr))
+	{
+		exit_proc(-1);
+		return 0;
+	}
+	void *ptr = pagedir_get_page(thread_current()->pagedir, vaddr);
+	if (!ptr)
+	{
+		exit_proc(-1);
+		return 0;
+	}
+	return ptr;
 }
 
-struct file_descriptor *
-get_open_file(int fd) {
-  struct list_elem *e;
-  struct file_descriptor *fd_struct; 
-  e = list_tail (&open_files);
-  while ((e = list_prev (e)) != list_head (&open_files)) 
-  {
-    fd_struct = list_entry (e, struct file_descriptor, elem);
-    if (fd_struct->fd_num == fd) {
-      return fd_struct;
-    }
-  }
-  return NULL;
+struct proc_file* list_search(struct list* files, int fd)
+{
+
+	struct list_elem *e;
+
+      for (e = list_begin (files); e != list_end (files);
+           e = list_next (e))
+        {
+          struct proc_file *f = list_entry (e, struct proc_file, elem);
+          if(f->fd == fd)
+          	return f;
+        }
+   return NULL;
 }
 
-int
-write (int fd, const void *buffer, unsigned size)
+void close_file(struct list* files, int fd)
 {
-  struct file_descriptor *fd_struct;  
-  int status = 0;
 
-  unsigned buffer_size = size;
-  void *buffer_tmp = buffer;
+	struct list_elem *e;
 
-  printf("write() 호출: fd=%d, buffer=%p, size=%u\n", fd, buffer, size);
+	struct proc_file *f;
 
-  /* check the user memory pointing by buffer are valid */
-  while (buffer_tmp != NULL)
-  {
-    if (!is_valid_ptr (buffer_tmp)) {
-      exit (-1);
-    }
-    
-    /* Advance */ 
-    if (buffer_size > PGSIZE)
-    {
-      buffer_tmp += PGSIZE;
-      buffer_size -= PGSIZE;
-    }
-    else if (buffer_size == 0)
-    {
-      /* terminate the checking loop */
-      buffer_tmp = NULL;
-    }
-    else
-    {
-      /* last loop */
-      buffer_tmp = buffer + size - 1;
-      buffer_size = 0;
-    }
-  }
-  
-  lock_acquire (&fs_lock); 
-  if (fd == STDIN_FILENO)
-  {
-    status = -1;
-  }
-  else if (fd == STDOUT_FILENO)
-  {
-    putbuf (buffer, size);;
-    status = size;
-  }
-  else 
-  {
-    fd_struct = get_open_file (fd);
-    if (fd_struct != NULL) {
-      status = file_write (fd_struct->file_struct, buffer, size);
-    }
-  }
-  lock_release (&fs_lock);
+      for (e = list_begin (files); e != list_end (files);
+           e = list_next (e))
+        {
+          f = list_entry (e, struct proc_file, elem);
+          if(f->fd == fd)
+          {
+          	file_close(f->ptr);
+          	list_remove(e);
+          }
+        }
 
-return status;
+    free(f);
+}
+
+void close_all_files(struct list* files)
+{
+
+	struct list_elem *e;
+
+	while(!list_empty(files))
+	{
+		e = list_pop_front(files);
+
+		struct proc_file *f = list_entry (e, struct proc_file, elem);
+          
+	      	file_close(f->ptr);
+	      	list_remove(e);
+	      	free(f);
+
+
+	}
+
+      
 }
