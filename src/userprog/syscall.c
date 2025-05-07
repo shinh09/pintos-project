@@ -5,6 +5,10 @@
 #include "threads/thread.h"
 
 static void syscall_handler (struct intr_frame *);
+bool is_valid_ptr(const void *);
+int wait(tid_t);
+void exit(int);
+void halt(void);
 
 void
 syscall_init (void) 
@@ -73,11 +77,40 @@ syscall_handler (struct intr_frame *f)
     if (!is_valid_ptr(esp + 4)) {
       exit(-1);
     }
-    f->eax = wait(*(pid_t *)(esp + 4));
+    f->eax = wait(*(tid_t *)(esp + 4));
     break;
   /* Add other cases here */
   default:
     exit(-1);
     break;
   }
+}
+
+int
+wait(tid_t tid)
+{
+    return process_wait(tid);
+}
+
+void
+exit(int status)
+{
+    struct thread *cur;
+
+    /* 1. Get current thread */
+    cur = thread_current();
+
+    /* 2. Print exit message */
+    printf("%s: exit(%d)\n", cur->name, status);
+
+    /* TODO: Save exit status somewhere for parent process (if needed) */
+
+    /* 3. Terminate the current thread */
+    thread_exit();
+}
+
+void
+halt(void)
+{
+    shutdown_power_off();
 }
