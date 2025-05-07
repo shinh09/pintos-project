@@ -29,7 +29,7 @@ tid_t
 process_execute (const char *file_name) 
 {
   char *fn_copy;
-  char *file_name_only;  // 실행 파일명만 담을 포인터
+  char *file_name_only;
   char *save_ptr;
   tid_t tid;
 
@@ -40,7 +40,7 @@ process_execute (const char *file_name)
   strlcpy (fn_copy, file_name, PGSIZE);
 
   /* Parse file name to get only the program name (before first space). */
-  file_name_only = palloc_get_page(0);  // 파일명만 따로 복사할 공간
+  file_name_only = palloc_get_page(0);
   if (file_name_only == NULL) {
     palloc_free_page(fn_copy);
     return TID_ERROR;
@@ -53,7 +53,7 @@ process_execute (const char *file_name)
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy);
 
-  palloc_free_page(file_name_only);  // 파일명용 메모리 해제
+  palloc_free_page(file_name_only);
   return tid;
 }
 
@@ -63,44 +63,38 @@ process_execute (const char *file_name)
 void
 argument_stack (const char *argv[], int argc, void **esp)
 {
+    int i;
     void *stack_ptr = *esp;
     void *argv_addr[argc];
 
-    /* 1️⃣ 인자 문자열 복사 (역순) */
-    for (int i = argc - 1; i >= 0; i--) {
+    for (i = argc - 1; i >= 0; i--) {
         int len = strlen(argv[i]) + 1;
         stack_ptr -= len;
         memcpy(stack_ptr, argv[i], len);
-        argv_addr[i] = stack_ptr;  // 복사된 인자의 주소 저장
+        argv_addr[i] = stack_ptr;
     }
 
-    /* 2️⃣ 워드(4바이트) 정렬 */
     uintptr_t align = (uintptr_t)stack_ptr % 4;
     if (align != 0) {
         stack_ptr -= align;
-        memset(stack_ptr, 0, align);  // 정렬용 0 채움
+        memset(stack_ptr, 0, align);
     }
 
-    /* 3️⃣ NULL 포인터 push */
     stack_ptr -= sizeof(char *);
     *(char **)stack_ptr = NULL;
 
-    /* 4️⃣ 인자들의 주소 push (역순) */
-    for (int i = argc - 1; i >= 0; i--) {
+    for (i = argc - 1; i >= 0; i--) {
         stack_ptr -= sizeof(char *);
         *(void **)stack_ptr = argv_addr[i];
     }
 
-    /* 5️⃣ argv의 주소 push */
     void *argv_start = stack_ptr;
     stack_ptr -= sizeof(char **);
     *(void **)stack_ptr = argv_start;
 
-    /* 6️⃣ argc push */
     stack_ptr -= sizeof(int);
     *(int *)stack_ptr = argc;
 
-    /* 7️⃣ 반환주소 push */
     stack_ptr -= sizeof(void *);
     *(void **)stack_ptr = 0;
 
