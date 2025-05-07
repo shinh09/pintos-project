@@ -90,7 +90,7 @@ syscall_handler (struct intr_frame *f)
     if (!is_valid_ptr(esp + 4)) {
       exit(-1);
     }
-    f->eax = exec(*(char **)(esp + 4));
+    f->eax = process_execute(*(char **)(esp + 4));
     break;
   case SYS_WAIT:
     if (!is_valid_ptr(esp + 4)) {
