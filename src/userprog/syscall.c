@@ -16,6 +16,7 @@ void halt(void);
 // 2.3
 struct list open_files;
 struct lock fs_lock;
+struct file_descriptor *get_open_file(int);
 
 void
 syscall_init (void) 
@@ -125,3 +126,16 @@ halt(void)
     shutdown_power_off();
 }
 
+struct file_descriptor *get_open_file(int fd) {
+  struct list_elem *e;
+  struct file_descriptor *fd_struct; 
+  e = list_tail (&open_files);
+  while ((e = list_prev (e)) != list_head (&open_files)) 
+  {
+    fd_struct = list_entry (e, struct file_descriptor, elem);
+    if (fd_struct->fd_num == fd) {
+      return fd_struct;
+    }
+  }
+  return NULL;
+}
