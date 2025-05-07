@@ -17,6 +17,7 @@ void halt(void);
 struct list open_files;
 struct lock fs_lock;
 struct file_descriptor *get_open_file(int);
+write (int, const void *, unsigned);
 
 void
 syscall_init (void) 
