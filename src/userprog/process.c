@@ -25,38 +25,60 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
-tid_t
-process_execute (const char *file_name) 
+static void
+start_process (void *file_name_)
 {
-  char *fn_copy;
-  char *file_name_only;
-  char *save_ptr;
-  tid_t tid;
+  char *file_name = file_name_;
+  struct intr_frame if_;
+  bool success;
 
-  /* Make a copy of FILE_NAME.
-     Otherwise there's a race between the caller and load(). */
-  fn_copy = palloc_get_page (0);
-  if (fn_copy == NULL)
-    return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
+  /* ITISYIJY */
+  char *argv[64];
+  int argc = 0;
+  char *token, *save_ptr;
 
-  /* Parse file name to get only the program name (before first space). */
-  file_name_only = palloc_get_page(0);  // 파일명만 따로 복사할 공간
-  if (file_name_only == NULL) {
-    palloc_free_page(fn_copy);
-    return TID_ERROR;
+  /* ITISYIJY */
+  char *parse_copy = palloc_get_page(0);
+  if (parse_copy == NULL) {
+    palloc_free_page(file_name);
+    thread_exit();
   }
-  strlcpy(file_name_only, file_name, PGSIZE);
-  char *parsed_name = strtok_r(file_name_only, " ", &save_ptr);
+  strlcpy(parse_copy, file_name, PGSIZE);
 
-  /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (parsed_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
-    palloc_free_page (fn_copy);
+  /* ITISYIJY */
+  for (token = strtok_r(parse_copy, " ", &save_ptr); token != NULL;
+      token = strtok_r(NULL, " ", &save_ptr)) {
+    argv[argc++] = token;
+  }
 
-  palloc_free_page(file_name_only);  // 파일명용 메모리 해제
-  return tid;
+  /* Initialize interrupt frame */
+  memset (&if_, 0, sizeof if_);
+  if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
+  if_.cs = SEL_UCSEG;
+  if_.eflags = FLAG_IF | FLAG_MBS;
+
+  /* ITISYIJY */
+  success = load (argv[0], &if_.eip, &if_.esp);
+
+  /* If load failed, quit */
+  if (!success) {
+    palloc_free_page (file_name); // ITISYIJY
+    palloc_free_page (parse_copy); // ITISYIJY
+    thread_exit ();
+  }
+
+  /* Set up argument stack */
+  argument_stack(argv, argc, &if_.esp);
+
+  /* Free allocated memory */
+  palloc_free_page (file_name);
+  palloc_free_page (parse_copy);
+
+  /* Start user process */
+  asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
+  NOT_REACHED ();
 }
+   
 
 /* A thread function that loads a user process and starts it
    running. */
