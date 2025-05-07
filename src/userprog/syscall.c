@@ -66,6 +66,8 @@ syscall_handler (struct intr_frame *f)
   int syscall_number;
 
   esp = f->esp;
+  printf("Syscall number: %d\n", *(int *)esp);
+
 
   /* 1. Validate stack pointer */
   if (!is_valid_ptr(esp)) {
@@ -86,20 +88,20 @@ syscall_handler (struct intr_frame *f)
     }
     exit(*(int *)(esp + 4));
     break;
-  case SYS_EXEC:
+    case SYS_EXEC:
     if (!is_valid_ptr(esp + 4)) {
       exit(-1);
     }
     f->eax = process_execute(*(char **)(esp + 4));
     break;
-  case SYS_WAIT:
+    case SYS_WAIT:
     if (!is_valid_ptr(esp + 4)) {
       exit(-1);
     }
     f->eax = wait(*(tid_t *)(esp + 4));
     break;
-  /* Add other cases here */
-  default:
+    /* Add other cases here */
+    default:
     exit(-1);
     break;
   }
@@ -160,46 +162,48 @@ write (int fd, const void *buffer, unsigned size)
 
   /* check the user memory pointing by buffer are valid */
   while (buffer_tmp != NULL)
-    {
-      if (!is_valid_ptr (buffer_tmp))
-	exit (-1);
-      
-      /* Advance */ 
-      if (buffer_size > PGSIZE)
-	{
-	  buffer_tmp += PGSIZE;
-	  buffer_size -= PGSIZE;
-	}
-      else if (buffer_size == 0)
-	{
-	  /* terminate the checking loop */
-	  buffer_tmp = NULL;
-	}
-      else
-	{
-	  /* last loop */
-	  buffer_tmp = buffer + size - 1;
-	  buffer_size = 0;
-	}
+  {
+    if (!is_valid_ptr (buffer_tmp)) {
+      exit (-1);
     }
-
+    
+    /* Advance */ 
+    if (buffer_size > PGSIZE)
+    {
+      buffer_tmp += PGSIZE;
+      buffer_size -= PGSIZE;
+    }
+    else if (buffer_size == 0)
+    {
+      /* terminate the checking loop */
+      buffer_tmp = NULL;
+    }
+    else
+    {
+      /* last loop */
+      buffer_tmp = buffer + size - 1;
+      buffer_size = 0;
+    }
+  }
+  
   lock_acquire (&fs_lock); 
   if (fd == STDIN_FILENO)
-    {
-      status = -1;
-    }
+  {
+    status = -1;
+  }
   else if (fd == STDOUT_FILENO)
-    {
-      putbuf (buffer, size);;
-      status = size;
-    }
+  {
+    putbuf (buffer, size);;
+    status = size;
+  }
   else 
-    {
-      fd_struct = get_open_file (fd);
-      if (fd_struct != NULL)
-	status = file_write (fd_struct->file_struct, buffer, size);
+  {
+    fd_struct = get_open_file (fd);
+    if (fd_struct != NULL) {
+      status = file_write (fd_struct->file_struct, buffer, size);
     }
+  }
   lock_release (&fs_lock);
 
-  return status;
+return status;
 }
