@@ -79,14 +79,14 @@ syscall_handler (struct intr_frame *f)
 
   /* 3. Process system call */
   switch (syscall_number) {
-  case SYS_HALT:
-    halt();
-    break;
-  case SYS_EXIT:
-    if (!is_valid_ptr(esp + 4)) {
-      exit(-1);
-    }
-    exit(*(int *)(esp + 4));
+    case SYS_HALT:
+      halt();
+      break;
+    case SYS_EXIT:
+      if (!is_valid_ptr(esp + 4)) {
+        exit(-1);
+      }
+      exit(*(int *)(esp + 4));
     break;
     case SYS_EXEC:
     if (!is_valid_ptr(esp + 4)) {
@@ -100,7 +100,14 @@ syscall_handler (struct intr_frame *f)
     }
     f->eax = wait(*(tid_t *)(esp + 4));
     break;
-    /* Add other cases here */
+    case SYS_WRITE:
+      if (!is_valid_ptr(esp + 4) || !is_valid_ptr(esp + 8) || !is_valid_ptr(esp + 12)) {
+        exit(-1);
+      }
+      f->eax = write(*(int *)(esp + 4),
+                      *(const void **)(esp + 8),
+                      *(unsigned *)(esp + 12));
+      break;
     default:
     exit(-1);
     break;
