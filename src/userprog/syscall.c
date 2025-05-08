@@ -395,29 +395,6 @@ get_open_file(int fd)
     return NULL;
 }
 
-
-// void
-// close_file(struct list* files, int fd_num)
-// {
-
-// 	struct list_elem *e;
-
-// 	struct file_descriptor *f;
-
-//       for (e = list_begin (files); e != list_end (files);
-//            e = list_next (e))
-//         {
-//           f = list_entry (e, struct file_descriptor, elem);
-//           if(f->fd_num == fd_num)
-//           {
-//           	file_close(f->file_struct);
-//           	list_remove(e);
-//           }
-//         }
-
-//     free(f);
-// }
-
 void close_open_file(int fd) {
 	struct list_elem *e;
 	for (e = list_begin(&thread_current()->files); e != list_end(&thread_current()->files); e = list_next(e)) {
@@ -443,20 +420,15 @@ void close(int fd) {
 void
 close_all_files(struct list* files)
 {
-
 	struct list_elem *e;
-
 	while(!list_empty(files))
 	{
 		e = list_pop_front(files);
 
 		struct file_descriptor *f = list_entry (e, struct file_descriptor, elem);
-          
-	      	file_close(f->file_struct);
-	      	list_remove(e);
-	      	free(f);
-
-
+		file_close(f->file_struct);
+		list_remove(e);
+		free(f);
 	}
 }
 
