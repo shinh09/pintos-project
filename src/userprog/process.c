@@ -20,6 +20,7 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+void argument_stack(const char* argv[], int argc, void **esp);
 
 extern struct list all_list;
 
@@ -75,6 +76,38 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
+
+
+  if (success) {
+    char *token, *save_ptr;
+    int argc = 0, i;
+
+    char *copy = malloc(strlen(file_name) + 1);
+    strlcpy(copy, file_name, strlen(file_name) + 1);
+
+    for (token = strtok_r(copy, " ", &save_ptr); token != NULL;
+          token = strtok_r(NULL, " ", &save_ptr)) {
+        argc++;
+    }
+
+    char **argv = malloc(argc * sizeof(char *));
+    strlcpy(copy, file_name, strlen(file_name) + 1);
+
+    for (token = strtok_r(copy, " ", &save_ptr), i = 0;
+          token != NULL;
+          token = strtok_r(NULL, " ", &save_ptr), i++) {
+        argv[i] = malloc(strlen(token) + 1);
+        strlcpy(argv[i], token, strlen(token) + 1);
+    }
+
+    argument_stack(argv, argc, &if_.esp);
+
+    for (i = 0; i < argc; i++) {
+        free(argv[i]);
+    }
+    free(argv);
+    free(copy);
+  }
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -261,7 +294,7 @@ struct Elf32_Phdr
 #define PF_W 2          /* Writable. */
 #define PF_R 4          /* Readable. */
 
-static bool setup_stack (void **esp, char * cmdline);
+static bool setup_stack (void **esp);
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
@@ -381,7 +414,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
     }
 
   /* Set up stack. */
-  if (!setup_stack (esp,file_name))
+  if (!setup_stack (esp))
     goto done;
 
   /* Start address. */
@@ -555,7 +588,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
    }
    
 static bool
-setup_stack (void **esp, char * file_name) 
+setup_stack (void **esp) 
 {
   uint8_t *kpage;
   bool success = false;
@@ -569,38 +602,6 @@ setup_stack (void **esp, char * file_name)
     else
       palloc_free_page (kpage);
   }
-
-  if (success) {
-    char *token, *save_ptr;
-    int argc = 0, i;
-
-    char *copy = malloc(strlen(file_name) + 1);
-    strlcpy(copy, file_name, strlen(file_name) + 1);
-
-    for (token = strtok_r(copy, " ", &save_ptr); token != NULL;
-         token = strtok_r(NULL, " ", &save_ptr)) {
-        argc++;
-    }
-
-    char **argv = malloc(argc * sizeof(char *));
-    strlcpy(copy, file_name, strlen(file_name) + 1);
-
-    for (token = strtok_r(copy, " ", &save_ptr), i = 0;
-         token != NULL;
-         token = strtok_r(NULL, " ", &save_ptr), i++) {
-        argv[i] = malloc(strlen(token) + 1);
-        strlcpy(argv[i], token, strlen(token) + 1);
-    }
-
-    argument_stack(argv, argc, esp);
-
-    for (i = 0; i < argc; i++) {
-        free(argv[i]);
-    }
-    free(argv);
-    free(copy);
-}
-
   return success;
 }
 
