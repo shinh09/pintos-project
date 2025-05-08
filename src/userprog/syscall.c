@@ -21,6 +21,7 @@ int filesize(int fd);
 void seek(int fd, unsigned position);
 unsigned tell(int fd);
 int open(const char *file_name);
+int read(int fd, void *buffer, unsigned size);
 
 struct lock fs_lock;
 struct list open_files;
@@ -101,26 +102,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 		case SYS_READ:
 		VALIDATE_PTR(p+7);
 		VALIDATE_PTR(*(p+6));
-		if(*(p+5)==0)
-		{
-			int i;
-			uint8_t* buffer = *(p+6);
-			for(i=0;i<*(p+7);i++)
-				buffer[i] = input_getc();
-			f->eax = *(p+7);
-		}
-		else
-		{
-			struct file_descriptor* fptr = get_open_file(*(p+5));
-			if(fptr==NULL)
-				f->eax=-1;
-			else
-			{
-				acquire_filesys_lock();
-				f->eax = file_read (fptr->file_struct, *(p+6), *(p+7));
-				release_filesys_lock();
-			}
-		}
+		f->eax = read(*(p+5), *(p+6), *(p+7));
 		break;
 
 		case SYS_WRITE:
@@ -353,6 +335,34 @@ open(const char *file_name)
     list_push_back(&thread_current()->files, &pfile->elem);
 
     return pfile->fd_num;
+}
+
+int
+read(int fd, void *buffer, unsigned size)
+{
+	if (!is_valid_ptr(buffer)) {
+		exit(-1);
+	}
+  
+	if (fd == 0) {  // STDIN
+		uint8_t *buf = buffer;
+		unsigned i;
+		for (i = 0; i < size; i++) {
+		buf[i] = input_getc();
+		}
+		return size;
+	}
+  
+	struct file_descriptor *fdesc = get_open_file(fd);
+	if (fdesc == NULL) {
+		return -1;
+	}
+  
+	acquire_filesys_lock();
+	int bytes_read = file_read(fdesc->file_struct, buffer, size);
+	release_filesys_lock();
+  
+	return bytes_read;
 }
 
 bool
