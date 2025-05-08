@@ -12,7 +12,7 @@ if (!is_valid_ptr(ptr)) exit(-1);
 
 static void syscall_handler (struct intr_frame *);
 bool is_valid_ptr(const void*);
-struct file_descriptor* list_search(struct list* files, int fd_num);
+struct file_descriptor *get_open_file(int fd);
 int wait(tid_t tid);
 void halt(void);
 
@@ -114,7 +114,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 		VALIDATE_PTR(p+1);
 
 		acquire_filesys_lock();
-		f->eax = file_length (list_search(&thread_current()->files, *(p+1))->file_struct);
+		f->eax = file_length (get_open_file(*(p+1))->file_struct);
 		release_filesys_lock();
 		break;
 
@@ -131,7 +131,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 		}
 		else
 		{
-			struct file_descriptor* fptr = list_search(&thread_current()->files, *(p+5));
+			struct file_descriptor* fptr = get_open_file(*(p+5));
 			if(fptr==NULL)
 				f->eax=-1;
 			else
@@ -153,7 +153,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 		}
 		else
 		{
-			struct file_descriptor* fptr = list_search(&thread_current()->files, *(p+5));
+			struct file_descriptor* fptr = get_open_file(*(p+5));
 			if(fptr==NULL)
 				f->eax=-1;
 			else
@@ -168,14 +168,14 @@ syscall_handler (struct intr_frame *f UNUSED)
 		case SYS_SEEK:
 		VALIDATE_PTR(p+5);
 		acquire_filesys_lock();
-		file_seek(list_search(&thread_current()->files, *(p+4))->file_struct,*(p+5));
+		file_seek(get_open_file(*(p+4))->file_struct,*(p+5));
 		release_filesys_lock();
 		break;
 
 		case SYS_TELL:
 		VALIDATE_PTR(p+1);
 		acquire_filesys_lock();
-		f->eax = file_tell(list_search(&thread_current()->files, *(p+1))->file_struct);
+		f->eax = file_tell(get_open_file(*(p+1))->file_struct);
 		release_filesys_lock();
 		break;
 
@@ -272,20 +272,22 @@ is_valid_ptr(const void *usr_ptr)
 }
 
 struct file_descriptor *
-list_search(struct list* files, int fd_num)
+get_open_file(int fd)
 {
+    struct list_elem *e;
+    struct list *files = &thread_current()->files;
 
-	struct list_elem *e;
+    for (e = list_begin(files); e != list_end(files); e = list_next(e)) {
+        struct file_descriptor *fd_struct = list_entry(e, struct file_descriptor, elem);
 
-      for (e = list_begin (files); e != list_end (files);
-           e = list_next (e))
-        {
-          struct file_descriptor *f = list_entry (e, struct file_descriptor, elem);
-          if(f->fd_num == fd_num)
-          	return f;
+        if (fd_struct->fd_num == fd) {
+            return fd_struct;
         }
-   return NULL;
+    }
+
+    return NULL;
 }
+
 
 void
 close_file(struct list* files, int fd_num)
