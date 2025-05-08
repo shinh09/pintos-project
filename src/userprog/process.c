@@ -29,108 +29,127 @@ extern struct list open_files;
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
 tid_t
-process_execute (const char *file_name) 
-{
-  char *fn_copy;
-  char *f_name;
-  tid_t tid;
-  
-  /* Make a copy of FILE_NAME.
-     Otherwise there's a race between the caller and load(). */
-  fn_copy = palloc_get_page (0);
-  if (fn_copy == NULL)
-    return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
-  char *save_ptr;
-  f_name = malloc(strlen(file_name)+1);
-  strlcpy (f_name, file_name, strlen(file_name)+1);
-  f_name = strtok_r (f_name," ",&save_ptr);
-  /* Create a new thread to execute FILE_NAME. */
-  //printf("%d\n", thread_current()->tid);
-  tid = thread_create (f_name, PRI_DEFAULT, start_process, fn_copy);
-  free(f_name);
-  if (tid == TID_ERROR)
-    palloc_free_page (fn_copy);
+  process_execute(const char *file_name) 
+   {
+     char *fn_copy;
+     char *f_name;
+     tid_t tid;
+   
+     fn_copy = palloc_get_page(0);
+     if (fn_copy == NULL)
+       return TID_ERROR;
+     strlcpy(fn_copy, file_name, PGSIZE);
+   
+     char *save_ptr;
+     f_name = malloc(strlen(file_name) + 1);
+     strlcpy(f_name, file_name, strlen(file_name) + 1);
+     f_name = strtok_r(f_name, " ", &save_ptr);
+   
+     tid = thread_create(f_name, PRI_DEFAULT, start_process, fn_copy);
+     free(f_name);
+   
+     if (tid == TID_ERROR) {
+       palloc_free_page(fn_copy);
+       return TID_ERROR;
+     }
 
-  sema_down(&thread_current()->child_lock);
+     struct list_elem *e;
+     struct child *child_info = NULL;
+     for (e = list_begin(&thread_current()->child_proc); 
+          e != list_end(&thread_current()->child_proc); 
+          e = list_next(e)) {
+       struct child *c = list_entry(e, struct child, elem);
+       if (c->tid == tid) {
+         child_info = c;
+         break;
+       }
+     }
+   
+     if (child_info == NULL)
+       return -1;
 
-  if(!thread_current()->success)
-    return -1;
-
-  return tid;
-}
+     sema_down(&thread_current()->child_lock);
+   
+     if (child_info->exit_error == -1)
+       return -1;
+   
+     return tid;
+  }
 
 /* A thread function that loads a user process and starts it
    running. */
-static void
-start_process (void *file_name_)
-{
-  //printf("In start_process\n");
-  char *file_name = file_name_;
-  struct intr_frame if_;
-  bool success;
+   static void
+   start_process (void *file_name_) 
+   {
+     char *file_name = file_name_;
+     struct intr_frame if_;
+     bool success;
+   
+     /* Initialize interrupt frame. */
+     memset (&if_, 0, sizeof if_);
+     if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
+     if_.cs = SEL_UCSEG;
+     if_.eflags = FLAG_IF | FLAG_MBS;
+   
+     success = load (file_name, &if_.eip, &if_.esp);
+     
+     struct thread *cur = thread_current();
+     struct thread *parent = cur->parent;
+     struct list_elem *e;
+     struct child *my_child = NULL;
+   
+     for (e = list_begin(&parent->child_proc); e != list_end(&parent->child_proc); e = list_next(e)) {
+       struct child *c = list_entry(e, struct child, elem);
+       if (c->tid == cur->tid) {
+         my_child = c;
+         break;
+       }
+     }
+   
+     if (my_child != NULL) {
+       my_child->exit_error = success ? 0 : -1;
+     }
 
-  /* Initialize interrupt frame and load executable. */
-  memset (&if_, 0, sizeof if_);
-  if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
-  if_.cs = SEL_UCSEG;
-  if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+     sema_up(&parent->child_lock);
 
+     if (!success) {
+       palloc_free_page(file_name);
+       thread_exit();
+     }
 
-  if (success) {
-    char *token, *save_ptr;
-    int argc = 0, i;
-
-    char *copy = malloc(strlen(file_name) + 1);
-    strlcpy(copy, file_name, strlen(file_name) + 1);
-
-    for (token = strtok_r(copy, " ", &save_ptr); token != NULL;
-          token = strtok_r(NULL, " ", &save_ptr)) {
-        argc++;
-    }
-
-    char **argv = malloc(argc * sizeof(char *));
-    strlcpy(copy, file_name, strlen(file_name) + 1);
-
-    for (token = strtok_r(copy, " ", &save_ptr), i = 0;
-          token != NULL;
-          token = strtok_r(NULL, " ", &save_ptr), i++) {
-        argv[i] = malloc(strlen(token) + 1);
-        strlcpy(argv[i], token, strlen(token) + 1);
-    }
-
-    argument_stack(argv, argc, &if_.esp);
-
-    for (i = 0; i < argc; i++) {
-        free(argv[i]);
-    }
-    free(argv);
-    free(copy);
-  }
-
-  /* If load failed, quit. */
-  palloc_free_page (file_name);
-  if (!success) {
-    //printf("%d %d\n",thread_current()->tid, thread_current()->parent->tid);
-    thread_current()->parent->success=false;
-    sema_up(&thread_current()->parent->child_lock);
-    thread_exit();
-  }
-  else
-  {
-    thread_current()->parent->success=true;
-    sema_up(&thread_current()->parent->child_lock);
-  }
-
-  /* Start the user process by simulating a return from an
-     interrupt, implemented by intr_exit (in
-     threads/intr-stubs.S).  Because intr_exit takes all of its
-     arguments on the stack in the form of a `struct intr_frame',
-     we just point the stack pointer (%esp) to our stack frame
-     and jump to it. */
-  asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
-  NOT_REACHED ();
+     char *token, *save_ptr;
+     int argc = 0, i;
+   
+     char *copy = malloc(strlen(file_name) + 1);
+     strlcpy(copy, file_name, strlen(file_name) + 1);
+   
+     for (token = strtok_r(copy, " ", &save_ptr); token != NULL;
+           token = strtok_r(NULL, " ", &save_ptr)) {
+         argc++;
+     }
+   
+     char **argv = malloc(argc * sizeof(char *));
+     strlcpy(copy, file_name, strlen(file_name) + 1);
+   
+     for (token = strtok_r(copy, " ", &save_ptr), i = 0;
+           token != NULL;
+           token = strtok_r(NULL, " ", &save_ptr), i++) {
+         argv[i] = malloc(strlen(token) + 1);
+         strlcpy(argv[i], token, strlen(token) + 1);
+     }
+   
+     argument_stack(argv, argc, &if_.esp);
+   
+     for (i = 0; i < argc; i++) {
+         free(argv[i]);
+     }
+     free(argv);
+     free(copy);
+   
+     palloc_free_page(file_name);
+ 
+     asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
+     NOT_REACHED ();
 }
 
 /* Waits for thread TID to die and returns its exit status.  If
