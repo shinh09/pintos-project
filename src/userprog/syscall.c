@@ -12,15 +12,16 @@
 
 static void syscall_handler (struct intr_frame *);
 bool is_valid_ptr(const void*);
-struct proc_file* list_search(struct list* files, int fd);
+struct file_descriptor* list_search(struct list* files, int fd_num);
 int wait(tid_t tid);
 void halt(void);
 
 extern bool running;
 
-struct proc_file {
-	struct file* ptr;
-	int fd;
+struct file_descriptor {
+	int fd_num;
+	tid_t owner;
+	struct file* file_struct;
 	struct list_elem elem;
 };
 
@@ -91,12 +92,12 @@ syscall_handler (struct intr_frame *f UNUSED)
 			f->eax = -1;
 		else
 		{
-			struct proc_file *pfile = malloc(sizeof(*pfile));
-			pfile->ptr = fptr;
-			pfile->fd = thread_current()->fd_count;
+			struct file_descriptor *pfile = malloc(sizeof(*pfile));
+			pfile->file_struct = fptr;
+			pfile->fd_num = thread_current()->fd_count;
 			thread_current()->fd_count++;
 			list_push_back (&thread_current()->files, &pfile->elem);
-			f->eax = pfile->fd;
+			f->eax = pfile->fd_num;
 
 		}
 		break;
@@ -105,7 +106,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 		VALIDATE_PTR(p+1);
 
 		acquire_filesys_lock();
-		f->eax = file_length (list_search(&thread_current()->files, *(p+1))->ptr);
+		f->eax = file_length (list_search(&thread_current()->files, *(p+1))->file_struct);
 		release_filesys_lock();
 		break;
 
@@ -122,13 +123,13 @@ syscall_handler (struct intr_frame *f UNUSED)
 		}
 		else
 		{
-			struct proc_file* fptr = list_search(&thread_current()->files, *(p+5));
+			struct file_descriptor* fptr = list_search(&thread_current()->files, *(p+5));
 			if(fptr==NULL)
 				f->eax=-1;
 			else
 			{
 				acquire_filesys_lock();
-				f->eax = file_read (fptr->ptr, *(p+6), *(p+7));
+				f->eax = file_read (fptr->file_struct, *(p+6), *(p+7));
 				release_filesys_lock();
 			}
 		}
@@ -144,13 +145,13 @@ syscall_handler (struct intr_frame *f UNUSED)
 		}
 		else
 		{
-			struct proc_file* fptr = list_search(&thread_current()->files, *(p+5));
+			struct file_descriptor* fptr = list_search(&thread_current()->files, *(p+5));
 			if(fptr==NULL)
 				f->eax=-1;
 			else
 			{
 				acquire_filesys_lock();
-				f->eax = file_write (fptr->ptr, *(p+6), *(p+7));
+				f->eax = file_write (fptr->file_struct, *(p+6), *(p+7));
 				release_filesys_lock();
 			}
 		}
@@ -159,14 +160,14 @@ syscall_handler (struct intr_frame *f UNUSED)
 		case SYS_SEEK:
 		VALIDATE_PTR(p+5);
 		acquire_filesys_lock();
-		file_seek(list_search(&thread_current()->files, *(p+4))->ptr,*(p+5));
+		file_seek(list_search(&thread_current()->files, *(p+4))->file_struct,*(p+5));
 		release_filesys_lock();
 		break;
 
 		case SYS_TELL:
 		VALIDATE_PTR(p+1);
 		acquire_filesys_lock();
-		f->eax = file_tell(list_search(&thread_current()->files, *(p+1))->ptr);
+		f->eax = file_tell(list_search(&thread_current()->files, *(p+1))->file_struct);
 		release_filesys_lock();
 		break;
 
@@ -257,7 +258,7 @@ bool is_valid_ptr(const void *usr_ptr)
 	return true;
 }
 
-struct proc_file* list_search(struct list* files, int fd)
+struct file_descriptor* list_search(struct list* files, int fd_num)
 {
 
 	struct list_elem *e;
@@ -265,27 +266,27 @@ struct proc_file* list_search(struct list* files, int fd)
       for (e = list_begin (files); e != list_end (files);
            e = list_next (e))
         {
-          struct proc_file *f = list_entry (e, struct proc_file, elem);
-          if(f->fd == fd)
+          struct file_descriptor *f = list_entry (e, struct file_descriptor, elem);
+          if(f->fd_num == fd_num)
           	return f;
         }
    return NULL;
 }
 
-void close_file(struct list* files, int fd)
+void close_file(struct list* files, int fd_num)
 {
 
 	struct list_elem *e;
 
-	struct proc_file *f;
+	struct file_descriptor *f;
 
       for (e = list_begin (files); e != list_end (files);
            e = list_next (e))
         {
-          f = list_entry (e, struct proc_file, elem);
-          if(f->fd == fd)
+          f = list_entry (e, struct file_descriptor, elem);
+          if(f->fd_num == fd_num)
           {
-          	file_close(f->ptr);
+          	file_close(f->file_struct);
           	list_remove(e);
           }
         }
@@ -302,9 +303,9 @@ void close_all_files(struct list* files)
 	{
 		e = list_pop_front(files);
 
-		struct proc_file *f = list_entry (e, struct proc_file, elem);
+		struct file_descriptor *f = list_entry (e, struct file_descriptor, elem);
           
-	      	file_close(f->ptr);
+	      	file_close(f->file_struct);
 	      	list_remove(e);
 	      	free(f);
 
