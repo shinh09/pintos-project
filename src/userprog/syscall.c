@@ -13,21 +13,26 @@ if (!is_valid_ptr(ptr)) exit(-1);
 static void syscall_handler (struct intr_frame *);
 bool is_valid_ptr(const void*);
 struct file_descriptor *get_open_file(int fd);
-int wait(tid_t tid);
-void halt(void);
-bool create(const char *file_name, unsigned initial_size);
-bool remove(const char *file_name);
-int filesize(int fd);
-void seek(int fd, unsigned position);
-unsigned tell(int fd);
-int open(const char *file_name);
-int read(int fd, void *buffer, unsigned size);
-
-struct lock fs_lock;
-struct list open_files;
 
 void acquire_filesys_lock(void);
 void release_filesys_lock(void);
+
+void halt(void);
+void exit(int status);
+int exec(char *file_name);
+int wait(tid_t tid);
+bool create(const char *file_name, unsigned initial_size);
+bool remove(const char *file_name);
+int open(const char *file_name);
+int filesize(int fd);
+int read(int fd, void *buffer, unsigned size);
+int write (int fd, const void *buffer, unsigned size);
+void seek(int fd, unsigned position);
+unsigned tell(int fd);
+void close(int fd);
+
+struct lock fs_lock;
+struct list open_files;
 
 extern bool running;
 
@@ -120,90 +125,27 @@ syscall_handler (struct intr_frame *f UNUSED)
 		VALIDATE_PTR(p+5);
 		seek(*(p+4), *(p+5));
 		break;
-
+		
 		case SYS_TELL:
 		VALIDATE_PTR(p+1);
 		f->eax = tell(*(p+1));
 		break;
-
+		
 		case SYS_CLOSE:
 		VALIDATE_PTR(p+1);
 		close(*(p+1));
 		break;
-
-
+		
+		
 		default:
 		printf("Default %d\n",*p);
 	}
 }
 
-int
-wait(tid_t tid)
-{
-	return process_wait(tid);
-}
-
 void
 halt(void)
 {
-    shutdown_power_off();
-}
-
-int
-write (int fd, const void *buffer, unsigned size) 
-{
-	int status = -1;
-
-	if (!is_valid_ptr(buffer)) {
-		exit(-1);
-	}
-
-	acquire_filesys_lock();
-
-	if (fd == STDIN_FILENO) {
-		lock_release(&fs_lock);
-		return -1;
-	}
-
-	if (fd == STDOUT_FILENO) {
-		putbuf(buffer, size);
-		status = size;
-	} else {
-		struct file_descriptor *fd_struct = get_open_file(fd);
-		if (fd_struct != NULL) {
-			status = file_write(fd_struct->file_struct, buffer, size);
-		} else {
-			status = -1;
-		}
-	}
-
-	release_filesys_lock();
-	return status;
-}
-
-int
-exec(char *file_name)
-{
-	acquire_filesys_lock();
-	char * fn_cp = malloc (strlen(file_name)+1);
-	  strlcpy(fn_cp, file_name, strlen(file_name)+1);
-	  
-	  char * save_ptr;
-	  fn_cp = strtok_r(fn_cp," ",&save_ptr);
-
-	 struct file* f = filesys_open (fn_cp);
-
-	  if(f==NULL)
-	  {
-		release_filesys_lock();
-		return -1;
-	  }
-	  else
-	  {
-	  	file_close(f);
-		  release_filesys_lock();
-		  return process_execute(file_name);
-	  }
+	shutdown_power_off();
 }
 
 void
@@ -211,25 +153,56 @@ exit(int status)
 {
 	//printf("Exit : %s %d %d\n",thread_current()->name, thread_current()->tid, status);
 	struct list_elem *e;
-
-      for (e = list_begin (&thread_current()->parent->child_proc); e != list_end (&thread_current()->parent->child_proc);
-           e = list_next (e))
-        {
-          struct child *f = list_entry (e, struct child, elem);
-          if(f->tid == thread_current()->tid)
-          {
-          	f->has_been_waited = true;
-          	f->exit_error = status;
-          }
-        }
-
-
+	
+	for (e = list_begin (&thread_current()->parent->child_proc); e != list_end (&thread_current()->parent->child_proc);
+	e = list_next (e))
+	{
+		struct child *f = list_entry (e, struct child, elem);
+		if(f->tid == thread_current()->tid)
+		{
+			f->has_been_waited = true;
+			f->exit_error = status;
+		}
+	}
+	
+	
 	thread_current()->exit_error = status;
-
+	
 	if(thread_current()->parent->waitingon == thread_current()->tid)
-		sema_up(&thread_current()->parent->child_lock);
-
+	sema_up(&thread_current()->parent->child_lock);
+	
 	thread_exit();
+}
+
+int
+exec(char *file_name)
+{
+	acquire_filesys_lock();
+	char * fn_cp = malloc (strlen(file_name)+1);
+	strlcpy(fn_cp, file_name, strlen(file_name)+1);
+	
+	char * save_ptr;
+	fn_cp = strtok_r(fn_cp," ",&save_ptr);
+	
+	struct file* f = filesys_open (fn_cp);
+	
+	if(f==NULL)
+	{
+		release_filesys_lock();
+		return -1;
+	}
+	else
+	{
+		file_close(f);
+		release_filesys_lock();
+		return process_execute(file_name);
+	}
+}
+
+int
+wait(tid_t tid)
+{
+	return process_wait(tid);
 }
 
 bool
@@ -258,49 +231,6 @@ remove(const char *file_name)
 	release_filesys_lock();
   
 	return success;
-}
-
-int
-filesize(int fd)
-{
-	struct file_descriptor *fdesc = get_open_file(fd);
-	if (fdesc == NULL) {
-		return -1;
-	}
-  
-	acquire_filesys_lock();
-	int size = file_length(fdesc->file_struct);
-	release_filesys_lock();
-	
-	return size;
-}
-
-void
-seek(int fd, unsigned position)
-{
-	struct file_descriptor *fdesc = get_open_file(fd);
-	if (fdesc == NULL) {
-		return;
-	}
-
-	acquire_filesys_lock();
-	file_seek(fdesc->file_struct, position);
-	release_filesys_lock();
-}
-
-unsigned
-tell(int fd)
-{
-	struct file_descriptor *fdesc = get_open_file(fd);
-	if (fdesc == NULL) {
-		return -1;
-	}
-
-	acquire_filesys_lock();
-	unsigned pos = file_tell(fdesc->file_struct);
-	release_filesys_lock();
-
-	return pos;
 }
 
 static int
@@ -336,6 +266,21 @@ open(const char *file_name)
 }
 
 int
+filesize(int fd)
+{
+	struct file_descriptor *fdesc = get_open_file(fd);
+	if (fdesc == NULL) {
+		return -1;
+	}
+  
+	acquire_filesys_lock();
+	int size = file_length(fdesc->file_struct);
+	release_filesys_lock();
+	
+	return size;
+}
+
+int
 read(int fd, void *buffer, unsigned size)
 {
 	if (!is_valid_ptr(buffer)) {
@@ -361,6 +306,107 @@ read(int fd, void *buffer, unsigned size)
 	release_filesys_lock();
   
 	return bytes_read;
+}
+
+int
+write (int fd, const void *buffer, unsigned size) 
+{
+	int status = -1;
+
+	if (!is_valid_ptr(buffer)) {
+		exit(-1);
+	}
+
+	acquire_filesys_lock();
+
+	if (fd == STDIN_FILENO) {
+		lock_release(&fs_lock);
+		return -1;
+	}
+
+	if (fd == STDOUT_FILENO) {
+		putbuf(buffer, size);
+		status = size;
+	} else {
+		struct file_descriptor *fd_struct = get_open_file(fd);
+		if (fd_struct != NULL) {
+			status = file_write(fd_struct->file_struct, buffer, size);
+		} else {
+			status = -1;
+		}
+	}
+
+	release_filesys_lock();
+	return status;
+}
+
+void
+seek(int fd, unsigned position)
+{
+	struct file_descriptor *fdesc = get_open_file(fd);
+	if (fdesc == NULL) {
+		return;
+	}
+
+	acquire_filesys_lock();
+	file_seek(fdesc->file_struct, position);
+	release_filesys_lock();
+}
+
+unsigned
+tell(int fd)
+{
+	struct file_descriptor *fdesc = get_open_file(fd);
+	if (fdesc == NULL) {
+		return -1;
+	}
+
+	acquire_filesys_lock();
+	unsigned pos = file_tell(fdesc->file_struct);
+	release_filesys_lock();
+
+	return pos;
+}
+
+void
+close_open_file(int fd)
+{
+	struct list_elem *e;
+	for (e = list_begin(&thread_current()->files); e != list_end(&thread_current()->files); e = list_next(e)) {
+		struct file_descriptor *fd_struct = list_entry(e, struct file_descriptor, elem);
+		if (fd_struct->fd_num == fd) {
+			list_remove(e);
+			file_close(fd_struct->file_struct);
+			free(fd_struct);
+			return;
+		}
+	}
+}
+
+void
+close(int fd)
+{
+    acquire_filesys_lock();
+    struct file_descriptor *fd_struct = get_open_file(fd);
+    if (fd_struct != NULL && fd_struct->owner == thread_current()->tid) {
+        close_open_file(fd);
+    }
+    release_filesys_lock();
+}
+
+void
+close_all_files(struct list* files)
+{
+	struct list_elem *e;
+	while(!list_empty(files))
+	{
+		e = list_pop_front(files);
+
+		struct file_descriptor *f = list_entry (e, struct file_descriptor, elem);
+		file_close(f->file_struct);
+		list_remove(e);
+		free(f);
+	}
 }
 
 bool
@@ -393,43 +439,6 @@ get_open_file(int fd)
     }
 
     return NULL;
-}
-
-void close_open_file(int fd) {
-	struct list_elem *e;
-	for (e = list_begin(&thread_current()->files); e != list_end(&thread_current()->files); e = list_next(e)) {
-		struct file_descriptor *fd_struct = list_entry(e, struct file_descriptor, elem);
-		if (fd_struct->fd_num == fd) {
-			list_remove(e);
-			file_close(fd_struct->file_struct);
-			free(fd_struct);
-			return;
-		}
-	}
-}
-
-void close(int fd) {
-    acquire_filesys_lock();
-    struct file_descriptor *fd_struct = get_open_file(fd);
-    if (fd_struct != NULL && fd_struct->owner == thread_current()->tid) {
-        close_open_file(fd);
-    }
-    release_filesys_lock();
-}
-
-void
-close_all_files(struct list* files)
-{
-	struct list_elem *e;
-	while(!list_empty(files))
-	{
-		e = list_pop_front(files);
-
-		struct file_descriptor *f = list_entry (e, struct file_descriptor, elem);
-		file_close(f->file_struct);
-		list_remove(e);
-		free(f);
-	}
 }
 
 void

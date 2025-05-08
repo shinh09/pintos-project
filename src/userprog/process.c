@@ -211,9 +211,34 @@ process_exit (void)
     printf("%s: exit(%d)\n",cur->name,exit_code);
 
     acquire_filesys_lock();
+    file_allow_write(cur->self); 
     file_close(thread_current()->self);
     close_all_files(&thread_current()->files);
     release_filesys_lock();
+
+    if (cur->parent != NULL) {
+      struct thread *parent = cur->parent;
+      lock_acquire(&parent->lock_child);
+
+      struct list_elem *e;
+      for (e = list_begin(&parent->children); e != list_end(&parent->children); e = list_next(e)) {
+          struct child *c = list_entry(e, struct child, elem);
+          if (c->tid == cur->tid) {
+              c->exit_error = exit_code;
+              c->has_been_waited = false;
+              break;
+          }
+      }
+
+      cond_signal(&parent->cond_child, &parent->lock_child);
+      lock_release(&parent->lock_child);
+  }
+
+    while (!list_empty(&cur->children)) {
+      struct list_elem *e = list_pop_front(&cur->children);
+      struct child *c = list_entry(e, struct child, elem);
+      free(c);
+  }
 
   
   /* Destroy the current process's page directory and switch back
