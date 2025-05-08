@@ -7,8 +7,11 @@
 #include "list.h"
 #include "process.h"
 
+#define VALIDATE_PTR(ptr)  \
+    if (!is_valid_ptr(ptr)) exit_proc(-1);
+
 static void syscall_handler (struct intr_frame *);
-void* check_addr(const void*);
+bool is_valid_ptr(const void*);
 struct proc_file* list_search(struct list* files, int fd);
 
 extern bool running;
@@ -28,13 +31,10 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
-  int * p = f->esp;
-
-	check_addr(p);
-
-
-
-  int system_call = * p;
+	int * p = f->esp;
+	VALIDATE_PTR(p);
+	int system_call = * p;
+	
 	switch (system_call)
 	{
 		case SYS_HALT:
@@ -42,32 +42,33 @@ syscall_handler (struct intr_frame *f UNUSED)
 		break;
 
 		case SYS_EXIT:
-		check_addr(p+1);
+		VALIDATE_PTR(p+1);
 		exit_proc(*(p+1));
 		break;
 
 		case SYS_EXEC:
-		check_addr(p+1);
-		check_addr(*(p+1));
+		VALIDATE_PTR(p+1);
+		VALIDATE_PTR(*(p+1));
 		f->eax = exec_proc(*(p+1));
 		break;
 
 		case SYS_WAIT:
-		check_addr(p+1);
+		VALIDATE_PTR(p+1);
 		f->eax = process_wait(*(p+1));
 		break;
 
 		case SYS_CREATE:
-		check_addr(p+5);
-		check_addr(*(p+4));
+		VALIDATE_PTR(p+5);
+		VALIDATE_PTR(*(p+4));
 		acquire_filesys_lock();
 		f->eax = filesys_create(*(p+4),*(p+5));
 		release_filesys_lock();
 		break;
 
 		case SYS_REMOVE:
-		check_addr(p+1);
-		check_addr(*(p+1));
+		VALIDATE_PTR(p+1);
+		VALIDATE_PTR(*(p+1));
+
 		acquire_filesys_lock();
 		if(filesys_remove(*(p+1))==NULL)
 			f->eax = false;
@@ -77,8 +78,8 @@ syscall_handler (struct intr_frame *f UNUSED)
 		break;
 
 		case SYS_OPEN:
-		check_addr(p+1);
-		check_addr(*(p+1));
+		VALIDATE_PTR(p+1);
+		VALIDATE_PTR(*(p+1));
 
 		acquire_filesys_lock();
 		struct file* fptr = filesys_open (*(p+1));
@@ -98,15 +99,16 @@ syscall_handler (struct intr_frame *f UNUSED)
 		break;
 
 		case SYS_FILESIZE:
-		check_addr(p+1);
+		VALIDATE_PTR(p+1);
+
 		acquire_filesys_lock();
 		f->eax = file_length (list_search(&thread_current()->files, *(p+1))->ptr);
 		release_filesys_lock();
 		break;
 
 		case SYS_READ:
-		check_addr(p+7);
-		check_addr(*(p+6));
+		VALIDATE_PTR(p+7);
+		VALIDATE_PTR(*(p+6));
 		if(*(p+5)==0)
 		{
 			int i;
@@ -130,8 +132,8 @@ syscall_handler (struct intr_frame *f UNUSED)
 		break;
 
 		case SYS_WRITE:
-		check_addr(p+7);
-		check_addr(*(p+6));
+		VALIDATE_PTR(p+7);
+		VALIDATE_PTR(*(p+6));
 		if(*(p+5)==1)
 		{
 			putbuf(*(p+6),*(p+7));
@@ -152,21 +154,21 @@ syscall_handler (struct intr_frame *f UNUSED)
 		break;
 
 		case SYS_SEEK:
-		check_addr(p+5);
+		VALIDATE_PTR(p+5);
 		acquire_filesys_lock();
 		file_seek(list_search(&thread_current()->files, *(p+4))->ptr,*(p+5));
 		release_filesys_lock();
 		break;
 
 		case SYS_TELL:
-		check_addr(p+1);
+		VALIDATE_PTR(p+1);
 		acquire_filesys_lock();
 		f->eax = file_tell(list_search(&thread_current()->files, *(p+1))->ptr);
 		release_filesys_lock();
 		break;
 
 		case SYS_CLOSE:
-		check_addr(p+1);
+		VALIDATE_PTR(p+1);
 		acquire_filesys_lock();
 		close_file(&thread_current()->files,*(p+1));
 		release_filesys_lock();
@@ -227,20 +229,18 @@ void exit_proc(int status)
 	thread_exit();
 }
 
-void* check_addr(const void *vaddr)
+bool is_valid_ptr(const void *usr_ptr)
 {
-	if (!is_user_vaddr(vaddr))
+	if (!is_user_vaddr(usr_ptr))
 	{
-		exit_proc(-1);
-		return 0;
+		return false;
 	}
-	void *ptr = pagedir_get_page(thread_current()->pagedir, vaddr);
+	void *ptr = pagedir_get_page(thread_current()->pagedir, usr_ptr);
 	if (!ptr)
 	{
-		exit_proc(-1);
-		return 0;
+		return false;
 	}
-	return ptr;
+	return true;
 }
 
 struct proc_file* list_search(struct list* files, int fd)
