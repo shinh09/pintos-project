@@ -16,6 +16,7 @@ struct file_descriptor *get_open_file(int fd);
 int wait(tid_t tid);
 void halt(void);
 bool create(const char *file_name, unsigned initial_size);
+bool remove(const char *file_name);
 
 struct lock fs_lock;
 struct list open_files;
@@ -79,14 +80,8 @@ syscall_handler (struct intr_frame *f UNUSED)
 		case SYS_REMOVE:
 		VALIDATE_PTR(p+1);
 		VALIDATE_PTR(*(p+1));
-
-		acquire_filesys_lock();
-		if(filesys_remove(*(p+1))==NULL)
-			f->eax = false;
-		else
-			f->eax = true;
-			lock_release(&fs_lock);
-			break;
+		bool remove(const char *file_name);
+		break;
 
 		case SYS_OPEN:
 		VALIDATE_PTR(p+1);
@@ -224,8 +219,6 @@ write (int fd, const void *buffer, unsigned size)
 	return status;
 }
 
-
-
 int
 exec(char *file_name)
 {
@@ -288,6 +281,20 @@ create(const char *file_name, unsigned initial_size)
 	bool success = filesys_create(file_name, initial_size);
 	release_filesys_lock();
 
+	return success;
+}
+
+bool
+remove(const char *file_name)
+{
+	if (!is_valid_ptr(file_name)) {
+		exit(-1);
+	}
+  
+	acquire_filesys_lock();
+	bool success = filesys_remove(file_name);
+	release_filesys_lock();
+  
 	return success;
 }
 
