@@ -20,6 +20,7 @@ bool remove(const char *file_name);
 int filesize(int fd);
 void seek(int fd, unsigned position);
 unsigned tell(int fd);
+int open(const char *file_name);
 
 struct lock fs_lock;
 struct list open_files;
@@ -89,22 +90,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 		case SYS_OPEN:
 		VALIDATE_PTR(p+1);
 		VALIDATE_PTR(*(p+1));
-
-		acquire_filesys_lock();
-		struct file* fptr = filesys_open (*(p+1));
-		release_filesys_lock();
-		if(fptr==NULL)
-			f->eax = -1;
-		else
-		{
-			struct file_descriptor *pfile = malloc(sizeof(*pfile));
-			pfile->file_struct = fptr;
-			pfile->fd_num = thread_current()->fd_count;
-			thread_current()->fd_count++;
-			list_push_back (&thread_current()->files, &pfile->elem);
-			f->eax = pfile->fd_num;
-
-		}
+		f->eax = open(*(p + 1));
 		break;
 
 		case SYS_FILESIZE:
@@ -335,6 +321,38 @@ tell(int fd)
 	release_filesys_lock();
 
 	return pos;
+}
+
+static int
+allocate_fd(void)
+{
+	return thread_current()->fd_count++;
+}
+
+int
+open(const char *file_name)
+{
+    if (!is_valid_ptr(file_name)) {
+        exit(-1);
+    }
+
+    acquire_filesys_lock();
+    struct file* fptr = filesys_open(file_name);
+    release_filesys_lock();
+
+    if (fptr == NULL)
+        return -1;
+
+    struct file_descriptor *pfile = malloc(sizeof(*pfile));
+    if (!pfile)
+        return -1;
+
+    pfile->file_struct = fptr;
+    pfile->fd_num = allocate_fd();
+    pfile->owner = thread_current()->tid;
+    list_push_back(&thread_current()->files, &pfile->elem);
+
+    return pfile->fd_num;
 }
 
 bool
