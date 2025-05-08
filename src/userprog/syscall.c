@@ -128,9 +128,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 
 		case SYS_CLOSE:
 		VALIDATE_PTR(p+1);
-		acquire_filesys_lock();
-		close_file(&thread_current()->files,*(p+1));
-		release_filesys_lock();
+		close(*(p+1));
 		break;
 
 
@@ -398,26 +396,48 @@ get_open_file(int fd)
 }
 
 
-void
-close_file(struct list* files, int fd_num)
-{
+// void
+// close_file(struct list* files, int fd_num)
+// {
 
+// 	struct list_elem *e;
+
+// 	struct file_descriptor *f;
+
+//       for (e = list_begin (files); e != list_end (files);
+//            e = list_next (e))
+//         {
+//           f = list_entry (e, struct file_descriptor, elem);
+//           if(f->fd_num == fd_num)
+//           {
+//           	file_close(f->file_struct);
+//           	list_remove(e);
+//           }
+//         }
+
+//     free(f);
+// }
+
+void close_open_file(int fd) {
 	struct list_elem *e;
+	for (e = list_begin(&thread_current()->files); e != list_end(&thread_current()->files); e = list_next(e)) {
+		struct file_descriptor *fd_struct = list_entry(e, struct file_descriptor, elem);
+		if (fd_struct->fd_num == fd) {
+			list_remove(e);
+			file_close(fd_struct->file_struct);
+			free(fd_struct);
+			return;
+		}
+	}
+}
 
-	struct file_descriptor *f;
-
-      for (e = list_begin (files); e != list_end (files);
-           e = list_next (e))
-        {
-          f = list_entry (e, struct file_descriptor, elem);
-          if(f->fd_num == fd_num)
-          {
-          	file_close(f->file_struct);
-          	list_remove(e);
-          }
-        }
-
-    free(f);
+void close(int fd) {
+    acquire_filesys_lock();
+    struct file_descriptor *fd_struct = get_open_file(fd);
+    if (fd_struct != NULL && fd_struct->owner == thread_current()->tid) {
+        close_open_file(fd);
+    }
+    release_filesys_lock();
 }
 
 void
