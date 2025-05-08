@@ -26,7 +26,7 @@ static struct list ready_list;
 
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
-struct list all_list;
+struct list open_files;
 
 /* Idle thread. */
 static struct thread *idle_thread;
@@ -37,7 +37,6 @@ static struct thread *initial_thread;
 /* Lock used by allocate_tid(). */
 static struct lock tid_lock;
 
-struct lock filesys_lock;
 
 /* Stack frame for kernel_thread(). */
 struct kernel_thread_frame 
@@ -93,9 +92,9 @@ thread_init (void)
 
   lock_init (&tid_lock);
   list_init (&ready_list);
-  list_init (&all_list);
+  list_init (&open_files);
 
-  lock_init(&filesys_lock);
+  // lock_init(&fs_lock);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -347,7 +346,7 @@ thread_foreach (thread_action_func *func, void *aux)
 
   ASSERT (intr_get_level () == INTR_OFF);
 
-  for (e = list_begin (&all_list); e != list_end (&all_list);
+  for (e = list_begin (&open_files); e != list_end (&open_files);
        e = list_next (e))
     {
       struct thread *t = list_entry (e, struct thread, allelem);
@@ -493,7 +492,7 @@ init_thread (struct thread *t, const char *name, int priority)
   sema_init(&t->child_lock,0);
   t->waitingon=0;
   t->self=NULL;
-  list_push_back (&all_list, &t->allelem);
+  list_push_back (&open_files, &t->allelem);
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
@@ -590,16 +589,6 @@ schedule (void)
   if (cur != next)
     prev = switch_threads (cur, next);
   thread_schedule_tail (prev);
-}
-
-void acquire_filesys_lock()
-{
-  lock_acquire(&filesys_lock);
-}
-
-void release_filesys_lock()
-{
-  lock_release(&filesys_lock);
 }
 
 /* Returns a tid to use for a new thread. */

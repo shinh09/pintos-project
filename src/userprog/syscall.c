@@ -8,13 +8,19 @@
 #include "process.h"
 
 #define VALIDATE_PTR(ptr)  \
-    if (!is_valid_ptr(ptr)) exit(-1);
+if (!is_valid_ptr(ptr)) exit(-1);
 
 static void syscall_handler (struct intr_frame *);
 bool is_valid_ptr(const void*);
 struct file_descriptor* list_search(struct list* files, int fd_num);
 int wait(tid_t tid);
 void halt(void);
+
+struct lock fs_lock;
+struct list open_files;
+
+void release_filesys_lock();
+void acquire_filesys_lock();
 
 extern bool running;
 
@@ -29,6 +35,8 @@ void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+  lock_init(&fs_lock);
+  list_init(&open_files);
 }
 
 static void
@@ -184,18 +192,21 @@ syscall_handler (struct intr_frame *f UNUSED)
 	}
 }
 
-int wait(tid_t tid)
+int
+wait(tid_t tid)
 {
 	return process_wait(tid);
 }
 
-void halt(void)
+void
+halt(void)
 {
     shutdown_power_off();
 }
 
 
-int exec(char *file_name)
+int
+exec(char *file_name)
 {
 	acquire_filesys_lock();
 	char * fn_cp = malloc (strlen(file_name)+1);
@@ -219,7 +230,8 @@ int exec(char *file_name)
 	  }
 }
 
-void exit(int status)
+void
+exit(int status)
 {
 	//printf("Exit : %s %d %d\n",thread_current()->name, thread_current()->tid, status);
 	struct list_elem *e;
@@ -244,7 +256,8 @@ void exit(int status)
 	thread_exit();
 }
 
-bool is_valid_ptr(const void *usr_ptr)
+bool
+is_valid_ptr(const void *usr_ptr)
 {
 	if (!is_user_vaddr(usr_ptr))
 	{
@@ -258,7 +271,8 @@ bool is_valid_ptr(const void *usr_ptr)
 	return true;
 }
 
-struct file_descriptor* list_search(struct list* files, int fd_num)
+struct file_descriptor *
+list_search(struct list* files, int fd_num)
 {
 
 	struct list_elem *e;
@@ -273,7 +287,8 @@ struct file_descriptor* list_search(struct list* files, int fd_num)
    return NULL;
 }
 
-void close_file(struct list* files, int fd_num)
+void
+close_file(struct list* files, int fd_num)
 {
 
 	struct list_elem *e;
@@ -294,7 +309,8 @@ void close_file(struct list* files, int fd_num)
     free(f);
 }
 
-void close_all_files(struct list* files)
+void
+close_all_files(struct list* files)
 {
 
 	struct list_elem *e;
@@ -311,6 +327,16 @@ void close_all_files(struct list* files)
 
 
 	}
+}
 
-      
+void
+acquire_filesys_lock()
+{
+  lock_acquire(&fs_lock);
+}
+
+void
+release_filesys_lock()
+{
+  lock_release(&fs_lock);
 }
