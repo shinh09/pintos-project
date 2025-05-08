@@ -19,8 +19,8 @@ void halt(void);
 struct lock fs_lock;
 struct list open_files;
 
-void release_filesys_lock();
-void acquire_filesys_lock();
+void acquire_filesys_lock(void);
+void release_filesys_lock(void);
 
 extern bool running;
 
@@ -86,8 +86,8 @@ syscall_handler (struct intr_frame *f UNUSED)
 			f->eax = false;
 		else
 			f->eax = true;
-		release_filesys_lock();
-		break;
+			lock_release(&fs_lock);
+			break;
 
 		case SYS_OPEN:
 		VALIDATE_PTR(p+1);
@@ -146,23 +146,12 @@ syscall_handler (struct intr_frame *f UNUSED)
 		case SYS_WRITE:
 		VALIDATE_PTR(p+7);
 		VALIDATE_PTR(*(p+6));
-		if(*(p+5)==1)
-		{
-			putbuf(*(p+6),*(p+7));
-			f->eax = *(p+7);
-		}
-		else
-		{
-			struct file_descriptor* fptr = get_open_file(*(p+5));
-			if(fptr==NULL)
-				f->eax=-1;
-			else
-			{
-				acquire_filesys_lock();
-				f->eax = file_write (fptr->file_struct, *(p+6), *(p+7));
-				release_filesys_lock();
-			}
-		}
+
+		int fd = *(p+5);
+		const void *buffer = *(p+6);
+		unsigned size = *(p+7);
+	
+		f->eax = write(fd, buffer, size);
 		break;
 
 		case SYS_SEEK:
@@ -204,6 +193,39 @@ halt(void)
     shutdown_power_off();
 }
 
+int
+write (int fd, const void *buffer, unsigned size) 
+{
+	int status = -1;
+
+	if (!is_valid_ptr(buffer)) {
+		exit(-1);
+	}
+
+	acquire_filesys_lock();
+
+	if (fd == STDIN_FILENO) {
+		lock_release(&fs_lock);
+		return -1;
+	}
+
+	if (fd == STDOUT_FILENO) {
+		putbuf(buffer, size);
+		status = size;
+	} else {
+		struct file_descriptor *fd_struct = get_open_file(fd);
+		if (fd_struct != NULL) {
+			status = file_write(fd_struct->file_struct, buffer, size);
+		} else {
+			status = -1;
+		}
+	}
+
+	release_filesys_lock();
+	return status;
+}
+
+
 
 int
 exec(char *file_name)
@@ -219,14 +241,14 @@ exec(char *file_name)
 
 	  if(f==NULL)
 	  {
-	  	release_filesys_lock();
-	  	return -1;
+		release_filesys_lock();
+		return -1;
 	  }
 	  else
 	  {
 	  	file_close(f);
-	  	release_filesys_lock();
-	  	return process_execute(file_name);
+		  release_filesys_lock();
+		  return process_execute(file_name);
 	  }
 }
 
@@ -332,13 +354,11 @@ close_all_files(struct list* files)
 }
 
 void
-acquire_filesys_lock()
-{
-  lock_acquire(&fs_lock);
+acquire_filesys_lock(void) {
+    lock_acquire(&fs_lock);
 }
 
 void
-release_filesys_lock()
-{
-  lock_release(&fs_lock);
+release_filesys_lock(void) {
+    lock_release(&fs_lock);
 }
