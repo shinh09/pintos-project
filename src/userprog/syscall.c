@@ -433,11 +433,13 @@ close_all_files(struct list* files)
 }
 
 void
-acquire_filesys_lock(void) {
+acquire_filesys_lock(void)
+{
     lock_acquire(&fs_lock);
 }
 
 void
-release_filesys_lock(void) {
+release_filesys_lock(void)
+{
     lock_release(&fs_lock);
 }
