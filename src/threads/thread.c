@@ -167,58 +167,63 @@ thread_print_stats (void)
    PRIORITY, but no actual priority scheduling is implemented.
    Priority scheduling is the goal of Problem 1-3. */
 tid_t
-thread_create (const char *name, int priority,
-               thread_func *function, void *aux) 
+  thread_create (const char *name, int priority,
+                  thread_func *function, void *aux) 
 {
-  struct thread *t;
-  struct kernel_thread_frame *kf;
-  struct switch_entry_frame *ef;
-  struct switch_threads_frame *sf;
-  tid_t tid;
-  enum intr_level old_level;
-
-  ASSERT (function != NULL);
-
-  /* Allocate thread. */
-  t = palloc_get_page (PAL_ZERO);
-  if (t == NULL)
-    return TID_ERROR;
-
-  /* Initialize thread. */
-  init_thread (t, name, priority);
-  tid = t->tid = allocate_tid ();
-  struct child* c = malloc(sizeof(*c));
-  c->tid = tid;
-  c->exit_error = t->exit_error;
-  c->used = false;
-  list_push_back (&running_thread()->child_proc, &c->elem);
-
-  /* Prepare thread for first run by initializing its stack.
-     Do this atomically so intermediate values for the 'stack' 
-     member cannot be observed. */
-  old_level = intr_disable ();
-
-  /* Stack frame for kernel_thread(). */
-  kf = alloc_frame (t, sizeof *kf);
-  kf->eip = NULL;
-  kf->function = function;
-  kf->aux = aux;
-
-  /* Stack frame for switch_entry(). */
-  ef = alloc_frame (t, sizeof *ef);
-  ef->eip = (void (*) (void)) kernel_thread;
-
-  /* Stack frame for switch_threads(). */
-  sf = alloc_frame (t, sizeof *sf);
-  sf->eip = switch_entry;
-  sf->ebp = 0;
-
-  intr_set_level (old_level);
-
-  /* Add to run queue. */
-  thread_unblock (t);
-
-  return tid;
+     struct thread *t;
+     struct kernel_thread_frame *kf;
+     struct switch_entry_frame *ef;
+     struct switch_threads_frame *sf;
+     tid_t tid;
+     enum intr_level old_level;
+   
+     ASSERT (function != NULL);
+   
+     /* Allocate thread. */
+     t = palloc_get_page (PAL_ZERO);
+     if (t == NULL)
+       return TID_ERROR;
+   
+     /* Initialize thread. */
+     init_thread (t, name, priority);
+   
+     /* Allocate and assign tid */
+     tid = t->tid = allocate_tid ();
+   
+   #ifdef USERPROG
+     /* Establish parent-child relationship */
+     t->parent_id = thread_current()->tid;
+   
+     struct child *c = malloc(sizeof(*c));
+     if (c != NULL) {
+       c->tid = tid;
+       c->exit_error = t->exit_error;
+       c->used = false;
+       list_push_back(&thread_current()->child_proc, &c->elem);
+     }
+   #endif
+   
+     /* Prepare thread for first run by initializing its stack. */
+     old_level = intr_disable ();
+   
+     kf = alloc_frame (t, sizeof *kf);
+     kf->eip = NULL;
+     kf->function = function;
+     kf->aux = aux;
+   
+     ef = alloc_frame (t, sizeof *ef);
+     ef->eip = (void (*) (void)) kernel_thread;
+   
+     sf = alloc_frame (t, sizeof *sf);
+     sf->eip = switch_entry;
+     sf->ebp = 0;
+   
+     intr_set_level (old_level);
+   
+     /* Add to run queue. */
+     thread_unblock (t);
+   
+     return tid;
 }
 
 /* Puts the current thread to sleep.  It will not be scheduled
@@ -472,27 +477,38 @@ is_thread (struct thread *t)
 /* Does basic initialization of T as a blocked thread named
    NAME. */
 static void
-init_thread (struct thread *t, const char *name, int priority)
-{
-  ASSERT (t != NULL);
-  ASSERT (PRI_MIN <= priority && priority <= PRI_MAX);
-  ASSERT (name != NULL);
-
-  memset (t, 0, sizeof *t);
-  t->status = THREAD_BLOCKED;
-  strlcpy (t->name, name, sizeof t->name);
-  t->stack = (uint8_t *) t + PGSIZE;
-  t->priority = priority;
-  t->magic = THREAD_MAGIC;
-  list_init (&t->child_proc);
-  t->parent = running_thread();
-  list_init (&t->files);
-  t->fd_count=2;
-  t->exit_error = -100;
-  sema_init(&t->child_lock,0);
-  t->waitingon=0;
-  t->self=NULL;
-  list_push_back (&open_files, &t->allelem);
+  init_thread (struct thread *t, const char *name, int priority)
+   {
+     ASSERT (t != NULL);
+     ASSERT (PRI_MIN <= priority && priority <= PRI_MAX);
+     ASSERT (name != NULL);
+   
+     memset (t, 0, sizeof *t);
+     t->status = THREAD_BLOCKED;
+     strlcpy (t->name, name, sizeof t->name);
+     t->stack = (uint8_t *) t + PGSIZE;
+     t->priority = priority;
+     t->magic = THREAD_MAGIC;
+   
+     /* General fields */
+     list_init (&t->child_proc);
+     t->parent = running_thread();
+     list_init (&t->files);
+     t->fd_count = 2;
+     t->exit_error = -100;
+     sema_init(&t->child_lock, 0);
+     t->waitingon = 0;
+     t->self = NULL;
+   
+  #ifdef USERPROG
+     t->child_load_status = 0;
+     lock_init(&t->lock_child);
+     cond_init(&t->cond_child);
+     list_init(&t->children);
+     t->exec_file = NULL;
+  #endif
+   
+     list_push_back (&open_files, &t->allelem);
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
