@@ -186,7 +186,7 @@ process_exit (void)
 
 
     if(cur->exit_error==-100)
-      exit_proc(-1);
+      exit(-1);
 
     int exit_code = cur->exit_error;
     printf("%s: exit(%d)\n",cur->name,exit_code);

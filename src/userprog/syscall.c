@@ -8,11 +8,13 @@
 #include "process.h"
 
 #define VALIDATE_PTR(ptr)  \
-    if (!is_valid_ptr(ptr)) exit_proc(-1);
+    if (!is_valid_ptr(ptr)) exit(-1);
 
 static void syscall_handler (struct intr_frame *);
 bool is_valid_ptr(const void*);
 struct proc_file* list_search(struct list* files, int fd);
+int wait(tid_t tid);
+void halt(void);
 
 extern bool running;
 
@@ -38,23 +40,24 @@ syscall_handler (struct intr_frame *f UNUSED)
 	switch (system_call)
 	{
 		case SYS_HALT:
-		shutdown_power_off();
+		halt();
 		break;
 
 		case SYS_EXIT:
 		VALIDATE_PTR(p+1);
-		exit_proc(*(p+1));
+		exit(*(p+1));
 		break;
 
 		case SYS_EXEC:
 		VALIDATE_PTR(p+1);
 		VALIDATE_PTR(*(p+1));
-		f->eax = exec_proc(*(p+1));
+		f->eax = exec(*(p+1));
 		break;
 
 		case SYS_WAIT:
 		VALIDATE_PTR(p+1);
-		f->eax = process_wait(*(p+1));
+		tid_t tid = *(p + 1);
+		f->eax = wait(tid);
 		break;
 
 		case SYS_CREATE:
@@ -180,7 +183,18 @@ syscall_handler (struct intr_frame *f UNUSED)
 	}
 }
 
-int exec_proc(char *file_name)
+int wait(tid_t tid)
+{
+	return process_wait(tid);
+}
+
+void halt(void)
+{
+    shutdown_power_off();
+}
+
+
+int exec(char *file_name)
 {
 	acquire_filesys_lock();
 	char * fn_cp = malloc (strlen(file_name)+1);
@@ -204,7 +218,7 @@ int exec_proc(char *file_name)
 	  }
 }
 
-void exit_proc(int status)
+void exit(int status)
 {
 	//printf("Exit : %s %d %d\n",thread_current()->name, thread_current()->tid, status);
 	struct list_elem *e;
