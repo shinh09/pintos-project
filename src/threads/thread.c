@@ -198,7 +198,7 @@ tid_t
      if (c != NULL) {
        c->tid = tid;
        c->exit_error = t->exit_error;
-       c->used = false;
+       c->has_been_waited = false;
        list_push_back(&thread_current()->child_proc, &c->elem);
      }
    #endif

@@ -130,7 +130,7 @@ typedef int tid_t;
       int tid;
       struct list_elem elem;
       int exit_error;
-      bool used;
+      bool has_been_waited;
     };
 
 /* If false (default), use round-robin scheduler.
