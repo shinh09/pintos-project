@@ -18,6 +18,8 @@ void halt(void);
 bool create(const char *file_name, unsigned initial_size);
 bool remove(const char *file_name);
 int filesize(int fd);
+void seek(int fd, unsigned position);
+unsigned tell(int fd);
 
 struct lock fs_lock;
 struct list open_files;
@@ -148,16 +150,12 @@ syscall_handler (struct intr_frame *f UNUSED)
 
 		case SYS_SEEK:
 		VALIDATE_PTR(p+5);
-		acquire_filesys_lock();
-		file_seek(get_open_file(*(p+4))->file_struct,*(p+5));
-		release_filesys_lock();
+		seek(*(p+4), *(p+5));
 		break;
 
 		case SYS_TELL:
 		VALIDATE_PTR(p+1);
-		acquire_filesys_lock();
-		f->eax = file_tell(get_open_file(*(p+1))->file_struct);
-		release_filesys_lock();
+		f->eax = tell(*(p+1));
 		break;
 
 		case SYS_CLOSE:
@@ -309,6 +307,34 @@ filesize(int fd)
 	release_filesys_lock();
 	
 	return size;
+}
+
+void
+seek(int fd, unsigned position)
+{
+	struct file_descriptor *fdesc = get_open_file(fd);
+	if (fdesc == NULL) {
+		return;
+	}
+
+	acquire_filesys_lock();
+	file_seek(fdesc->file_struct, position);
+	release_filesys_lock();
+}
+
+unsigned
+tell(int fd)
+{
+	struct file_descriptor *fdesc = get_open_file(fd);
+	if (fdesc == NULL) {
+		return -1;
+	}
+
+	acquire_filesys_lock();
+	unsigned pos = file_tell(fdesc->file_struct);
+	release_filesys_lock();
+
+	return pos;
 }
 
 bool
