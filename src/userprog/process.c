@@ -561,49 +561,42 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 
-   void argument_stack(const char* argv[], int argc, void **esp)
-   {
-       int i;
-   
-       // Step 1: 인자 문자열들을 스택에 복사 (역순)
-       void *argv_addr[argc];  // 각 문자열의 주소 저장용
-   
-       for (i = argc - 1; i >= 0; i--) {
-           size_t len = strlen(argv[i]) + 1;
-           *esp -= len;
-           memcpy(*esp, argv[i], len);
-           argv_addr[i] = *esp;  // 이 인자의 주소를 기록
-       }
-   
-       // Step 2: 워드 얼라인먼트 (4의 배수로 맞춤)
-       while ((uintptr_t)(*esp) % 4 != 0) {
-           *esp -= 1;
-           memset(*esp, 0, 1);
-       }
-   
-       // Step 3: NULL 포인터 push
-       *esp -= sizeof(char *);
-       memset(*esp, 0, sizeof(char *));
-   
-       // Step 4: argv 배열 push (주소 역순)
-       for (i = argc - 1; i >= 0; i--) {
-           *esp -= sizeof(char *);
-           memcpy(*esp, &argv_addr[i], sizeof(char *));
-       }
-   
-       // Step 5: argv의 시작 주소 push
-       void *argv_start = *esp;
-       *esp -= sizeof(char **);
-       memcpy(*esp, &argv_start, sizeof(char **));
-   
-       // Step 6: argc push
-       *esp -= sizeof(int);
-       memcpy(*esp, &argc, sizeof(int));
-   
-       // Step 7: 리턴 어드레스 push
-       *esp -= sizeof(void *);
-       memset(*esp, 0, sizeof(void *));
-   }
+void argument_stack(const char* argv[], int argc, void **esp)
+{
+    int i;
+
+    void *argv_addr[argc];
+
+    for (i = argc - 1; i >= 0; i--) {
+        size_t len = strlen(argv[i]) + 1;
+        *esp -= len;
+        memcpy(*esp, argv[i], len);
+        argv_addr[i] = *esp;
+    }
+
+    while ((uintptr_t)(*esp) % 4 != 0) {
+        *esp -= 1;
+        memset(*esp, 0, 1);
+    }
+
+    *esp -= sizeof(char *);
+    memset(*esp, 0, sizeof(char *));
+
+    for (i = argc - 1; i >= 0; i--) {
+        *esp -= sizeof(char *);
+        memcpy(*esp, &argv_addr[i], sizeof(char *));
+    }
+
+    void *argv_start = *esp;
+    *esp -= sizeof(char **);
+    memcpy(*esp, &argv_start, sizeof(char **));
+
+    *esp -= sizeof(int);
+    memcpy(*esp, &argc, sizeof(int));
+
+    *esp -= sizeof(void *);
+    memset(*esp, 0, sizeof(void *));
+}
    
 static bool
 setup_stack (void **esp) 
